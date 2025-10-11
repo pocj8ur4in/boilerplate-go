@@ -139,6 +139,23 @@ prepare:
 		fi; \
 	fi
 
+	@echo "$(BLUE)Checking sqlc...$(RESET)"
+	@if ! command -v sqlc > /dev/null; then \
+		echo "$(YELLOW)sqlc is not installed. installing sqlc...$(RESET)"; \
+		go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0; \
+		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
+	else \
+		echo "$(BLUE)sqlc is already installed: $(shell sqlc version)$(RESET)"; \
+	fi
+
+	@echo "$(BLUE)Checking swagger-cli...$(RESET)"
+	@if ! command -v swagger-cli > /dev/null; then \
+		echo "$(YELLOW)swagger-cli is not installed. installing swagger-cli...$(RESET)"; \
+		npm install -g swagger-cli; \
+	else \
+		echo "$(BLUE)swagger-cli is already installed: $(shell swagger-cli --version)$(RESET)"; \
+	fi
+
 	@echo "$(BLUE)Preparing go project...$(RESET)"
 	go mod download;
 
