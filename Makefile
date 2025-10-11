@@ -88,6 +88,31 @@ prepare:
 		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
 	fi
 
+	@echo "$(BLUE)Checking docker...$(RESET)"
+	@if ! command -v docker > /dev/null; then \
+		echo "$(YELLOW)docker is not installed. installing docker...$(RESET)"; \
+		if command -v brew > /dev/null; then \
+			brew install --cask docker; \
+		elif command -v apt-get > /dev/null; then \
+			sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin; \
+			sudo systemctl enable docker && sudo systemctl start docker; \
+			sudo usermod -aG docker $$USER; \
+		elif command -v yum > /dev/null; then \
+			sudo yum install -y docker docker-compose; \
+			sudo systemctl enable docker && sudo systemctl start docker; \
+			sudo usermod -aG docker $$USER; \
+		elif command -v dnf > /dev/null; then \
+			sudo dnf install -y docker docker-compose; \
+			sudo systemctl enable docker && sudo systemctl start docker; \
+			sudo usermod -aG docker $$USER; \
+		else \
+			echo "$(RED)please install docker manually$(RESET)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "$(BLUE)docker is already installed: $(shell docker --version)$(RESET)"; \
+	fi
+
 	@echo "$(BLUE)Preparing go project...$(RESET)"
 	go mod download;
 
