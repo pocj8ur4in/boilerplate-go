@@ -74,6 +74,13 @@ prepare:
 		echo "$(BLUE)go is already installed: $(shell go version)$(RESET)"; \
 	fi
 
+	@echo "$(BLUE)Checking air...$(RESET)"
+	@if ! command -v air > /dev/null; then \
+		echo "$(YELLOW)air is not installed. installing air...$(RESET)"; \
+		go install github.com/cosmtrek/air@v1.61.7; \
+		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
+	fi
+
 	@echo "$(BLUE)Checking golangci-lint...$(RESET)"
 	@if ! command -v golangci-lint > /dev/null; then \
 		echo "$(YELLOW)golangci-lint is not installed. installing golangci-lint...$(RESET)"; \
