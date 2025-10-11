@@ -113,6 +113,29 @@ prepare:
 		echo "$(BLUE)docker is already installed: $(shell docker --version)$(RESET)"; \
 	fi
 
+	@echo "$(BLUE)Checking docker compose...$(RESET)"
+	@if ! command -v docker-compose > /dev/null && ! docker compose version > /dev/null 2>&1; then \
+		echo "$(YELLOW)docker compose is not installed. installing...$(RESET)"; \
+		if command -v brew > /dev/null; then \
+			brew install docker-compose; \
+		elif command -v apt-get > /dev/null; then \
+			sudo apt-get install -y docker-compose-plugin; \
+		elif command -v yum > /dev/null; then \
+			sudo yum install -y docker-compose; \
+		elif command -v dnf > /dev/null; then \
+			sudo dnf install -y docker-compose; \
+		else \
+			sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$$(uname -s)-$$(uname -m)" -o /usr/local/bin/docker-compose; \
+			sudo chmod +x /usr/local/bin/docker-compose; \
+		fi; \
+	else \
+		if command -v docker-compose > /dev/null; then \
+			echo "$(BLUE)docker compose is already installed: $(shell docker-compose --version)$(RESET)"; \
+		else \
+			echo "$(BLUE)docker compose plugin is available: $(shell docker compose version 2>/dev/null)$(RESET)"; \
+		fi; \
+	fi
+
 	@echo "$(BLUE)Preparing go project...$(RESET)"
 	go mod download;
 

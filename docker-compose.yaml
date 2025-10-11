@@ -1,0 +1,23 @@
+services:
+    boilerplate-server:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: dev
+        image: boilerplate-server:dev
+        container_name: boilerplate-server
+        ports:
+            - '38080:8080'
+        environment:
+            - CGO_ENABLED=1
+            - CONFIG_PATH=config.json
+        volumes:
+            - .:/app
+            - ./config.json:/app/config.json
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+
+networks:
+    boilerplate-network:
+        driver: bridge
