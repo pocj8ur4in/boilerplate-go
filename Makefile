@@ -68,6 +68,13 @@ prepare:
 		echo "$(BLUE)go is already installed: $(shell go version)$(RESET)"; \
 	fi
 
+	@echo "$(BLUE)Checking golangci-lint...$(RESET)"
+	@if ! command -v golangci-lint > /dev/null; then \
+		echo "$(YELLOW)golangci-lint is not installed. installing golangci-lint...$(RESET)"; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.4.0; \
+		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
+	fi
+
 	@echo "$(BLUE)Preparing go project...$(RESET)"
 	go mod download;
 

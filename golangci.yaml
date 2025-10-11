@@ -1,0 +1,122 @@
+version: 2
+
+run:
+    go: "1.25.0"
+    timeout: 5m
+    skip-dirs:
+        - vendor
+        - third_party
+    build-tags:
+        - integration
+
+linters:
+    disable:
+        - ireturn
+    enable:
+        - errcheck
+        - govet
+        - gosec
+        - revive
+        - staticcheck
+        - unused
+        - asasalint
+        - asciicheck
+        - bidichk
+        - bodyclose
+        - canonicalheader
+        - containedctx
+        - contextcheck
+        - copyloopvar
+        - cyclop
+        - decorder
+        - dogsled
+        - dupl
+        - dupword
+        - durationcheck
+        - err113
+        - errchkjson
+        - errname
+        - errorlint
+        - fatcontext
+        - forbidigo
+        - forcetypeassert
+        - funlen
+        - ginkgolinter
+        - gocheckcompilerdirectives
+        - gochecknoglobals
+        - gochecknoinits
+        - gochecksumtype
+        - gocognit
+        - goconst
+        - gocritic
+        - gocyclo
+        - godot
+        - godox
+        - goheader
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - gosmopolitan
+        - grouper
+        - importas
+        - inamedparam
+        - intrange
+        - ireturn
+        - lll
+        - loggercheck
+        - maintidx
+        - makezero
+        - mirror
+        - misspell
+        - mnd
+        - nakedret
+        - nestif
+        - nilerr
+        - nilnil
+        - nlreturn
+        - noctx
+        - nolintlint
+        - nonamedreturns
+        - nosprintfhostport
+        - paralleltest
+        - perfsprint
+        - prealloc
+        - predeclared
+        - promlinter
+        - protogetter
+        - reassign
+        - rowserrcheck
+        - sloglint
+        - spancheck
+        - sqlclosecheck
+        - tagalign
+        - testableexamples
+        - testifylint
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - usestdlibvars
+        - varnamelen
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl_v5
+        - zerologlint
+
+formatters:
+    enable:
+        - gci
+        - gofmt
+    settings:
+        gci:
+            sections:
+                - standard
+                - default
+                - prefix(github.com/pocj8ur4in/boilerplate-go)
+
+linters-settings:
+
+issues:
+    max-issues-per-linter: 0
+    max-same-issues: 0
