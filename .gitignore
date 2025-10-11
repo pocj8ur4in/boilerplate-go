@@ -1,0 +1,229 @@
+### OS ###
+
+## OSX ##
+
+# OSX leaves these everywhere on SMB shares
+._*
+
+# OSX trash
+.DS_Store
+
+# OSX resource fork and metadata
+.AppleDouble
+
+# OSX custom application association overrides
+.LSOverride
+
+# OSX Finder-specific extended attributes
+.fseventsd
+
+# OSX Spotlight search index
+.Spotlight-V100
+
+# OSX system files and metadata
+.Trashes
+.VolumeIcon.icns
+
+# OSX Dock icon files
+Icon
+
+# OSX document revisions
+.DocumentRevisions-V100
+
+# OSX temporary items
+.TemporaryItems
+
+# OSX Time Machine exclusion file
+.com.apple.timemachine.donotpresent
+
+# OSX Apple Database
+.AppleDB
+
+# OSX Apple Desktop
+.AppleDesktop
+
+# OSX AirPort Disk support file
+.apdisk
+
+# OSX iCloud file cache
+*.icloud
+
+### IDE ###
+
+# common IDE and editor files
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+## IntelliJ ##
+
+# Exclude under .idea
+.idea
+*/.idea
+
+# IntelliJ workspace files
+*.iws
+
+# IntelliJ output directory
+out/
+*/out/
+
+# IntelliJ modules directory
+.idea_modules/
+*/.idea_modules/
+
+# IntelliJ IDEA project files
+*.iml
+
+# IntelliJ Qodana files
+qodana.yaml
+
+## VSCode ##
+
+# VSCode workspace settings folder
+.vscode/*
+*/.vscode/*
+
+# Allow specific files in .vscode
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# VSCode history folder
+.history/
+*/.history/
+
+# VSCode extension files
+*.vsix
+
+# VSCode additional history folder
+.history
+
+# VSCode Ionide plugin folder
+.ionide
+
+### Languages ###
+
+## Go ##
+
+# Executable files for Go
+*.exe
+*.exe~
+
+# Build directories for Go
+/bin
+/build
+
+# Dynamic link libraries
+*.dll
+*.so
+*.dylib
+
+# Go debug binary
+__debug_bin
+
+# Go output folders
+/output*/
+/*/output*/
+/_output*/
+/*/_output*/
+/_output
+
+# Output of the go coverage tool
+*.out
+
+# Go test binary files
+*.test
+
+## Docker ##
+
+# Docker image and container files
+*.tar
+*.img
+*.docker
+*.dockerenv
+
+# Docker Compose logs and temporary files
+docker-compose.log
+docker-compose.*.log
+
+# Docker builds
+.docker/
+*/.docker/
+
+# Docker volumes and mount points
+volumes/
+*/volumes/
+mnt/
+*/mnt/
+
+# Docker Swarm service definitions and secret files
+*.secret
+*.stack
+
+# Docker log files
+docker-*.log
+
+## Kubernetes ##
+
+# Kubernetes secrets and config files
+*.kubeconfig
+*.kube/
+*/*.kube/
+
+# Kubernetes generated resources
+.kubernetes/
+*/.kubernetes/
+*.k8s
+*.k8s.yaml
+*.k8s.yml
+
+# Kubernetes-specific temporary files or directories
+.kustomize/
+*/.kustomize/
+.kubectl-config
+
+# Logs or debug output from kubectl commands
+kubectl-logs*
+kubectl-debug*
+
+## GCP ##
+
+# GCP credentials files
+gcp-credentials.json
+*.gcp-key.json
+
+### Developers ###
+
+# Developers can store local stuff in dirs named __something
+__*
+
+# direnv .envrc files
+.envrc
+
+## Secret ##
+
+# Config files
+config.json
+config.*.json
+!config.example.json
+
+# Environment files
+.env
+.env.*
+.env.local
+
+## Air ##
+
+# tmp files
+tmp/
+
+## OpenAPI ##
+
+# OpenAPI bundled files
+api/*.bundled.yaml

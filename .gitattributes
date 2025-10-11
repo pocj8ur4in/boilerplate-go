@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.md diff=markdown
+*.json diff=json
+
+*.sh executable
+
+go.sum merge=ours
+
+*.lock merge=ours
+*.lock binary
