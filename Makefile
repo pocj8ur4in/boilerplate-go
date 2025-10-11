@@ -1,3 +1,6 @@
+# Include
+include hack/go.mk
+
 # Colors
 WHITE   := \033[1;37m
 BLACK   := \033[30m
@@ -33,6 +36,9 @@ help:
 	@echo
 	@echo "$(WHITE)$(CYAN)[default target]$(RESET)"
 	@echo "- $(WHITE)make prepare$(RESET)                             $(CYAN)Prepare project for development$(RESET)"
+	@echo
+	@$(MAKE) -f $(HACK_DIR)/go.mk help-go CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
+	@echo
 
 .PHONY: prepare
 prepare:
