@@ -33,13 +33,13 @@ go:
 		fi; \
 	elif [ "$(TARGET)" = "test" ]; then \
 		echo "$(BLUE)Testing go project...$(RESET)"; \
-		CONFIG_PATH=$(CONFIG_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -v; \
+		CONFIG_PATH=$(CONFIG_EXAMPLE_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -v; \
 	elif [ "$(TARGET)" = "benchmark" ]; then \
 		echo "$(BLUE)Benchmarking go project...$(RESET)"; \
-		CONFIG_PATH=$(CONFIG_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -bench=. -benchmem -run=^$$; \
+		cd $(CURDIR) && CONFIG_PATH=$(CONFIG_EXAMPLE_PATH) CGO_ENABLED=1 go test $$(go list ./... | grep -v /internal/gen/) -bench=. -benchmem -run=^$$; \
 	elif [ "$(TARGET)" = "coverage" ]; then \
 		echo "$(BLUE)Testing go project with coverage...$(RESET)"; \
-		CONFIG_PATH=$(CONFIG_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -v -coverprofile=coverage.out -covermode=atomic; \
+		CONFIG_PATH=$(CONFIG_EXAMPLE_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -v -coverprofile=coverage.out -covermode=atomic && \
 		go tool cover -func=coverage.out; \
 	elif [ "$(TARGET)" = "fmt" ]; then \
 		echo "$(BLUE)Formatting go project...$(RESET)"; \

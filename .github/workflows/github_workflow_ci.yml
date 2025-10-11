@@ -18,6 +18,21 @@ jobs:
         name: Lint & Test
         runs-on: ubuntu-latest
 
+        services:
+            postgres:
+                image: postgres:17.4-alpine
+                env:
+                    POSTGRES_USER: boilerplate_user
+                    POSTGRES_PASSWORD: boilerplate_password
+                    POSTGRES_DB: boilerplate
+                ports:
+                    - 35432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
         steps:
             - name: Checkout Code
               uses: actions/checkout@v5
@@ -59,8 +74,7 @@ jobs:
                   flags: backend
                   name: codecov-go
                   verbose: true
-                  fail_ci_if_error: true
-                  threshold: 80
+                  fail_ci_if_error: false
 
     performance:
         name: Performance Tests

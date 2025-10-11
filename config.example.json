@@ -1,1 +1,15 @@
-{}
+{
+  "logger": {
+    "level": "debug"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 35432,
+    "user": "boilerplate_user",
+    "password": "boilerplate_password",
+    "db_name": "boilerplate",
+    "ssl_mode": false,
+    "max_conns": 10,
+    "max_idle": 5
+  }
+}

@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
 
@@ -18,6 +19,7 @@ func NewModule() fx.Option {
 		fx.Provide(
 			LoadFromFile,
 			ProvideLoggerConfig,
+			ProvideDatabaseConfig,
 		),
 	)
 }
@@ -26,6 +28,9 @@ func NewModule() fx.Option {
 type Config struct {
 	// Logger provides logger configuration.
 	Logger *logger.Config `json:"logger"`
+
+	// Database provides database configuration.
+	Database *database.Config `json:"database"`
 }
 
 // SetDefault sets the default values.
@@ -36,6 +41,13 @@ func (c *Config) SetDefault() {
 	}
 
 	c.Logger.SetDefault()
+
+	// set database
+	if c.Database == nil {
+		c.Database = &database.Config{}
+	}
+
+	c.Database.SetDefault()
 }
 
 // New creates a new configuration.
@@ -91,4 +103,9 @@ func getConfigPath() string {
 // ProvideLoggerConfig provides logger configuration.
 func ProvideLoggerConfig(config *Config) *logger.Config {
 	return config.Logger
+}
+
+// ProvideDatabaseConfig provides database configuration.
+func ProvideDatabaseConfig(config *Config) *database.Config {
+	return config.Database
 }

@@ -3,10 +3,12 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/fx"
 
 	configPkg "github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/config"
+	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
 
@@ -16,6 +18,7 @@ func New() *fx.App {
 		// modules
 		configPkg.NewModule(),
 		loggerPkg.NewModule(),
+		databasePkg.NewModule(),
 
 		// lifecycle hooks
 		fx.Invoke(registerHooks),
@@ -25,6 +28,7 @@ func New() *fx.App {
 // registerHooks registers lifecycle hooks for the application.
 func registerHooks(
 	lifecycle fx.Lifecycle,
+	dbConn *databasePkg.DB,
 	log *loggerPkg.Logger,
 ) {
 	lifecycle.Append(fx.Hook{
@@ -34,6 +38,15 @@ func registerHooks(
 			return nil
 		},
 		OnStop: func(_ context.Context) error {
+			log.Info().Msg("shutting down application...")
+
+			// close database
+			if err := dbConn.Close(); err != nil {
+				log.Error().Err(err).Msg("failed to close database")
+
+				return fmt.Errorf("close database: %w", err)
+			}
+
 			log.Info().Msg("application stopped")
 
 			return nil

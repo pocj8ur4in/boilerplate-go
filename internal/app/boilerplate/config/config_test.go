@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
 
@@ -41,6 +42,43 @@ func TestConfigSetDefault(t *testing.T) {
 		require.NotNil(t, config.Logger)
 		require.NotNil(t, config.Logger.Level)
 		assert.Equal(t, "debug", *config.Logger.Level)
+	})
+}
+
+func TestConfigSetDefaultDatabase(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default database when config.Database is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Database)
+		require.NotNil(t, config.Database.Host)
+		assert.Equal(t, "localhost", *config.Database.Host)
+	})
+
+	t.Run("keep existing database when config.Database is already set", func(t *testing.T) {
+		t.Parallel()
+
+		host := "test-host"
+		port := 3306
+		config := &Config{
+			Database: &database.Config{
+				Host: &host,
+				Port: &port,
+			},
+		}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Database)
+		require.NotNil(t, config.Database.Host)
+		require.NotNil(t, config.Database.Port)
+		assert.Equal(t, "test-host", *config.Database.Host)
+		assert.Equal(t, 3306, *config.Database.Port)
 	})
 }
 
@@ -227,5 +265,41 @@ func TestNewModule(t *testing.T) {
 		module := NewModule()
 
 		require.NotNil(t, module)
+	})
+}
+
+func TestProvideDatabaseConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return database config from config", func(t *testing.T) {
+		t.Parallel()
+
+		host := "localhost"
+		port := 5432
+
+		config := &Config{
+			Database: &database.Config{
+				Host: &host,
+				Port: &port,
+			},
+		}
+
+		dbConfig := ProvideDatabaseConfig(config)
+
+		require.NotNil(t, dbConfig)
+		require.NotNil(t, dbConfig.Host)
+		require.NotNil(t, dbConfig.Port)
+		assert.Equal(t, "localhost", *dbConfig.Host)
+		assert.Equal(t, 5432, *dbConfig.Port)
+	})
+
+	t.Run("return nil when config.Database is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		dbConfig := ProvideDatabaseConfig(config)
+
+		assert.Nil(t, dbConfig)
 	})
 }
