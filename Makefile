@@ -40,6 +40,8 @@ help:
 	@echo
 	@echo "$(WHITE)$(CYAN)[default target]$(RESET)"
 	@echo "- $(WHITE)make prepare$(RESET)                             $(CYAN)Prepare project for development$(RESET)"
+	@echo "- $(WHITE)make rename$(RESET)                              $(CYAN)Rename repository and project names$(RESET)"
+	@echo
 	@$(MAKE) -f $(HACK_DIR)/go.mk help-go CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" CONFIG_EXAMPLE_FILE="$(CONFIG_EXAMPLE_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
 	@echo
 	@$(MAKE) -f $(HACK_DIR)/sqlc.mk help-sqlc CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" CONFIG_EXAMPLE_FILE="$(CONFIG_EXAMPLE_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
@@ -217,3 +219,35 @@ prepare:
 	go mod download;
 	go mod tidy;
 
+.PHONY: rename
+rename:
+	@echo "$(BLUE)Renaming project...$(RESET)"
+	@echo
+	@echo "- $(YELLOW)current repository: $(REPO_NAME)$(RESET)"
+	@echo "- $(YELLOW)current project: $(PROJECT_NAME)$(RESET)"
+	@echo
+	@read -p "Enter new repository name (e.g., your-username/your-repo): " NEW_REPO_NAME; \
+	read -p "Enter new project name (e.g., your-project): " NEW_PROJECT_NAME; \
+	if [ -z "$$NEW_REPO_NAME" ] || [ -z "$$NEW_PROJECT_NAME" ]; then \
+		echo "$(RED)error: both repository name, project name are required$(RESET)"; \
+		exit 1; \
+	fi; \
+	echo; \
+	echo "$(BLUE)Updating repository name...$(RESET)"; \
+	for file in $$(find . -type f \( -name "*.go" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.md" -o -name "*.mk" -o -name "Dockerfile" -o -name "go.mod" -o -name "LICENSE" \) -not -path "./.git/*" -not -path "./build/*" -not -path "./tmp/*"); do \
+		sed -i.bak "s|$(REPO_NAME)|$$NEW_REPO_NAME|g" "$$file" 2>/dev/null && rm -f "$$file.bak" 2>/dev/null || true; \
+	done; \
+	echo "$(BLUE)Updating project name...$(RESET)"; \
+	for file in $$(find . -type f \( -name "*.go" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.md" -o -name "*.mk" -o -name "Dockerfile" -o -name "go.mod" -o -name "LICENSE" \) -not -path "./.git/*" -not -path "./build/*" -not -path "./tmp/*"); do \
+		sed -i.bak "s|$(PROJECT_NAME)|$$NEW_PROJECT_NAME|g" "$$file" 2>/dev/null && rm -f "$$file.bak" 2>/dev/null || true; \
+	done; \
+	echo; \
+	echo "$(BLUE)Updating Makefile variables...$(RESET)"; \
+	sed -i.bak "s|REPO_NAME := $(REPO_NAME)|REPO_NAME := $$NEW_REPO_NAME|g" Makefile 2>/dev/null && rm -f Makefile.bak 2>/dev/null || true; \
+	sed -i.bak "s|PROJECT_NAME := $(PROJECT_NAME)|PROJECT_NAME := $$NEW_PROJECT_NAME|g" Makefile 2>/dev/null && rm -f Makefile.bak 2>/dev/null || true; \
+	echo; \
+	echo "$(GREEN)Renaming completed successfully!$(RESET)"; \
+	echo "- $(YELLOW)new repository name: $$NEW_REPO_NAME$(RESET)"; \
+	echo "- $(YELLOW)new project name: $$NEW_PROJECT_NAME$(RESET)"; \
+	echo; \
+	echo "$(BLUE)run 'make prepare' to update dependencies and continue setup.$(RESET)"
