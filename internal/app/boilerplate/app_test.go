@@ -8,9 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
+	configPkg "github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/config"
+	serverPkg "github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server"
 	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	jwtPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
@@ -76,6 +79,10 @@ func TestNew(t *testing.T) {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
+			},
+			"server": {
+				"host": "localhost",
+				"port": 38080
 			}
 		}`)
 
@@ -109,6 +116,10 @@ func TestNewWithStart(t *testing.T) {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
+			},
+			"server": {
+				"host": "localhost",
+				"port": 38080
 			}
 		}`)
 
@@ -143,6 +154,10 @@ func TestRegisterHooks(t *testing.T) {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
+			},
+			"server": {
+				"host": "localhost",
+				"port": 38080
 			}
 		}`)
 
@@ -176,14 +191,14 @@ func TestRegisterHooksDirectly(t *testing.T) {
 		log, err := loggerPkg.New(&loggerPkg.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		jwt, err := jwtPkg.New(&jwtPkg.Config{SecretKey: &[]string{"secret_key"}[0]})
-		require.NoError(t, err)
-
 		// create minimal structures (won't actually call Close on them)
 		dbConn := &databasePkg.DB{DB: &sql.DB{}}
 		redisConn := &redisPkg.Redis{}
 
-		registerHooks(lifecycle, dbConn, log, jwt, redisConn)
+		// create minimal server
+		server := &serverPkg.Server{}
+
+		registerHooks(lifecycle, dbConn, log, redisConn, server)
 
 		require.True(t, hookRegistered, "lifecycle hook should be registered")
 		require.True(t, onStartCalled, "OnStart should be called successfully")
@@ -207,15 +222,21 @@ func TestNewWithInvalidConfig(t *testing.T) {
 		// set non-existent config path
 		t.Setenv("CONFIG_PATH", "/non/existent/path/config.json")
 
-		app := New()
+		app := fx.New(
+			fx.NopLogger,
+			configPkg.NewModule(),
+			loggerPkg.NewModule(),
+			databasePkg.NewModule(),
+			jwtPkg.NewModule(),
+			redisPkg.NewModule(),
+			serverPkg.NewModule(),
+			fx.Invoke(registerHooks),
+		)
 		require.NotNil(t, app)
 
-		// start should fail due to invalid config
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		err := app.Start(ctx)
+		err := app.Err()
 		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to read file")
 	})
 }
 
@@ -243,6 +264,10 @@ func TestNewWithCustomConfig(t *testing.T) {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
+			},
+			"server": {
+				"host": "localhost",
+				"port": 38080
 			}
 		}`
 		setupTestConfig(t, content)

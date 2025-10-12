@@ -9,24 +9,12 @@ import (
 
 	"go.uber.org/fx"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
-
-// NewModule provides module for config.
-func NewModule() fx.Option {
-	return fx.Module("config",
-		fx.Provide(
-			LoadFromFile,
-			ProvideLoggerConfig,
-			ProvideDatabaseConfig,
-			ProvideJWTConfig,
-			ProvideRedisConfig,
-		),
-	)
-}
 
 // Config represents the configuration for the app.
 type Config struct {
@@ -41,6 +29,9 @@ type Config struct {
 
 	// Redis provides redis configuration.
 	Redis *redis.Config `json:"redis"`
+
+	// Server provides server configuration.
+	Server *server.Config `json:"server"`
 }
 
 // SetDefault sets the default values.
@@ -72,6 +63,27 @@ func (c *Config) SetDefault() {
 	}
 
 	c.Redis.SetDefault()
+
+	// set server
+	if c.Server == nil {
+		c.Server = &server.Config{}
+	}
+
+	c.Server.SetDefault()
+}
+
+// NewModule provides module for config.
+func NewModule() fx.Option {
+	return fx.Module("config",
+		fx.Provide(
+			LoadFromFile,
+			ProvideLoggerConfig,
+			ProvideDatabaseConfig,
+			ProvideJWTConfig,
+			ProvideRedisConfig,
+			ProvideServerConfig,
+		),
+	)
 }
 
 // New creates a new configuration.
@@ -142,4 +154,9 @@ func ProvideJWTConfig(config *Config) *jwt.Config {
 // ProvideRedisConfig provides redis configuration.
 func ProvideRedisConfig(config *Config) *redis.Config {
 	return config.Redis
+}
+
+// ProvideServerConfig provides server configuration.
+func ProvideServerConfig(config *Config) *server.Config {
+	return config.Server
 }

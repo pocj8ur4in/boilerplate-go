@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
@@ -456,5 +457,73 @@ func TestConfigSetDefaultJWT(t *testing.T) {
 		assert.Equal(t, "test_issuer", *config.JWT.Issuer)
 		assert.Equal(t, "test_audience", *config.JWT.Audience)
 		assert.Equal(t, "test_secret_key", *config.JWT.SecretKey)
+	})
+}
+
+func TestProvideServerConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return server config from config", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Server: &server.Config{
+				Host: &[]string{"localhost"}[0],
+				Port: &[]int{8080}[0],
+			},
+		}
+
+		serverConfig := ProvideServerConfig(config)
+
+		require.NotNil(t, serverConfig)
+		require.NotNil(t, serverConfig.Host)
+		require.NotNil(t, serverConfig.Port)
+		assert.Equal(t, "localhost", *serverConfig.Host)
+		assert.Equal(t, 8080, *serverConfig.Port)
+	})
+
+	t.Run("return nil when config.Server is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		serverConfig := ProvideServerConfig(config)
+
+		assert.Nil(t, serverConfig)
+	})
+}
+
+func TestConfigSetDefaultServer(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default server when config.Server is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Server)
+		require.NotNil(t, config.Server.Host)
+		assert.Equal(t, "localhost", *config.Server.Host)
+	})
+
+	t.Run("keep existing server when config.Server is already set", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Server: &server.Config{
+				Host: &[]string{"0.0.0.0"}[0],
+				Port: &[]int{9090}[0],
+			},
+		}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Server)
+		require.NotNil(t, config.Server.Host)
+		require.NotNil(t, config.Server.Port)
+		assert.Equal(t, "0.0.0.0", *config.Server.Host)
+		assert.Equal(t, 9090, *config.Server.Port)
 	})
 }
