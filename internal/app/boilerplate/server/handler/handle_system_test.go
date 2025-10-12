@@ -66,15 +66,10 @@ func TestStatusCheck(t *testing.T) {
 func TestHealthCheck(t *testing.T) {
 	t.Parallel()
 
-	t.Run("health check returns not implemented", func(t *testing.T) {
+	t.Run("health check returns ok", func(t *testing.T) {
 		t.Parallel()
 
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := &Handler{
-			logger: log,
-		}
+		handler := setupTestHandler(t)
 
 		// create test request
 		req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -84,26 +79,21 @@ func TestHealthCheck(t *testing.T) {
 		handler.HealthCheck(recorder, req)
 
 		// verify response
-		assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+		assert.Equal(t, http.StatusOK, recorder.Code)
 		assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 	})
 
 	t.Run("health check response format", func(t *testing.T) {
 		t.Parallel()
 
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := &Handler{
-			logger: log,
-		}
+		handler := setupTestHandler(t)
 
 		req := httptest.NewRequest(http.MethodGet, "/health", nil)
 		recorder := httptest.NewRecorder()
 
 		handler.HealthCheck(recorder, req)
 
-		assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+		assert.Equal(t, http.StatusOK, recorder.Code)
 		assert.NotEmpty(t, recorder.Body.String())
 	})
 }
@@ -158,12 +148,7 @@ func TestSystemHandlersIntegration(t *testing.T) {
 	t.Run("all system handlers respond correctly", func(t *testing.T) {
 		t.Parallel()
 
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := &Handler{
-			logger: log,
-		}
+		handler := setupTestHandler(t)
 
 		endpoints := []struct {
 			name    string
@@ -184,9 +169,9 @@ func TestSystemHandlersIntegration(t *testing.T) {
 
 				endpoint.handler(recorder, req)
 
-				// StatusCheck returns OK, others return NotImplemented
+				// StatusCheck and HealthCheck return OK, others return NotImplemented
 				expectedStatus := http.StatusNotImplemented
-				if endpoint.name == "status" {
+				if endpoint.name == "status" || endpoint.name == "health" {
 					expectedStatus = http.StatusOK
 				}
 
