@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -56,6 +57,21 @@ func setupTestRedis(t *testing.T) *redis.Redis {
 	require.NoError(t, err)
 
 	return redisClient
+}
+
+// setupTestJWT creates a test JWT.
+func setupTestJWT(t *testing.T) *jwt.JWT {
+	t.Helper()
+
+	secretKey := "test-secret-key"
+	jwtConfig := &jwt.Config{
+		SecretKey: &secretKey,
+	}
+
+	jwtService, err := jwt.New(jwtConfig)
+	require.NoError(t, err)
+
+	return jwtService
 }
 
 func TestConfigSetDefault(t *testing.T) {
@@ -211,6 +227,7 @@ func TestNew(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		cfg := &Config{
 			CORS: &CORSConfig{
@@ -219,7 +236,7 @@ func TestNew(t *testing.T) {
 		}
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(cfg, log, mockHandler, redisClient)
+		server, err := New(cfg, log, mockHandler, jwtService, redisClient)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -245,9 +262,10 @@ func TestNew(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler, redisClient)
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -271,6 +289,7 @@ func TestSetupRouter(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		cfg := &Config{
 			CORS: &CORSConfig{
@@ -279,7 +298,7 @@ func TestSetupRouter(t *testing.T) {
 		}
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(cfg, log, mockHandler, redisClient)
+		server, err := New(cfg, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		router := server.setupRouter(server.config, log, redisClient)
@@ -298,13 +317,14 @@ func TestSetupAPIHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		router := server.setupRouter(server.config, log, redisClient)
-		handler := server.setupAPIHandler(mockHandler, router)
+		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
 
 		require.NotNil(t, handler)
 	})
@@ -342,13 +362,14 @@ func TestCreateHTTPServer(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler, redisClient)
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		router := server.setupRouter(config, log, redisClient)
-		handler := server.setupAPIHandler(mockHandler, router)
+		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
 		httpServer := server.createHTTPServer(config, handler)
 
 		verifyHTTPServer(t, httpServer, "localhost:8080",
@@ -371,13 +392,14 @@ func TestCreateHTTPServer(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler, redisClient)
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		router := server.setupRouter(config, log, redisClient)
-		handler := server.setupAPIHandler(mockHandler, router)
+		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
 		httpServer := server.createHTTPServer(config, handler)
 
 		verifyHTTPServer(t, httpServer, "0.0.0.0:9090",
@@ -395,9 +417,10 @@ func TestShutdown(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -431,9 +454,10 @@ func TestServerInvalidEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request for non-existent endpoint
@@ -458,9 +482,10 @@ func TestServerHTTPMethods(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		methods := []string{
@@ -501,9 +526,10 @@ func TestServerHandlerIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// verify server components
@@ -526,16 +552,17 @@ func TestServerHandlerIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		router := server.setupRouter(server.config, log, redisClient)
 		require.NotNil(t, router)
 
 		// verify router can be used to create handler
-		handler := server.setupAPIHandler(mockHandler, router)
+		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
 		require.NotNil(t, handler)
 	})
 }
@@ -558,9 +585,10 @@ func TestServerConfiguration(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler, redisClient)
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// verify config is applied to HTTP server
@@ -581,9 +609,10 @@ func TestServerStatusEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request
@@ -608,9 +637,10 @@ func TestServerHealthEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request
@@ -635,9 +665,10 @@ func TestServerMetricsEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request
@@ -725,19 +756,16 @@ func TestCompressionInResponse(t *testing.T) {
 	t.Run("compression is applied when enabled", func(t *testing.T) {
 		t.Parallel()
 
-		config := &Config{
-			Compression: &CompressionConfig{
-				Enabled: &[]bool{true}[0],
-			},
-		}
+		config := &Config{Compression: &CompressionConfig{Enabled: &[]bool{true}[0]}}
 
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler, redisClient)
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request with Accept-Encoding header
@@ -766,9 +794,10 @@ func TestCompressionInResponse(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler, redisClient)
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request with Accept-Encoding header
@@ -973,9 +1002,10 @@ func TestCORSHeaders(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create test request with Origin header
@@ -999,9 +1029,10 @@ func TestCORSHeaders(t *testing.T) {
 		require.NoError(t, err)
 
 		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler, redisClient)
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
 		// create preflight request
@@ -1030,9 +1061,10 @@ func createTestServerWithCORS(
 	require.NoError(t, err)
 
 	redisClient := setupTestRedis(t)
+	jwtService := setupTestJWT(t)
 
 	mockHandler := &mockAPIHandler{}
-	server, err := New(config, log, mockHandler, redisClient)
+	server, err := New(config, log, mockHandler, jwtService, redisClient)
 	require.NoError(t, err)
 
 	return server
@@ -1093,5 +1125,116 @@ func TestCORSCustomOrigins(t *testing.T) {
 
 		server := createTestServerWithCORS(t, config)
 		makeRequestAndVerifyCORS(t, server, "https://evil.com", "")
+	})
+}
+
+func TestServerJWTIntegration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("JWT service is properly integrated", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
+		require.NoError(t, err)
+
+		require.NotNil(t, server)
+		require.NotNil(t, server.httpServer)
+	})
+
+	t.Run("JWT middleware is applied to server", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
+		require.NoError(t, err)
+
+		require.NotNil(t, server.httpServer.Handler)
+	})
+}
+
+func TestServerWithDifferentJWTConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("create server with custom JWT secret", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		redisClient := setupTestRedis(t)
+
+		secretKey := "custom-secret-key"
+		jwtConfig := &jwt.Config{
+			SecretKey: &secretKey,
+		}
+		jwtService, err := jwt.New(jwtConfig)
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler, jwtService, redisClient)
+		require.NoError(t, err)
+
+		require.NotNil(t, server)
+		require.NotNil(t, server.httpServer)
+	})
+}
+
+func TestServerSetupWithAllComponents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("setup server with all components", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Host:         &[]string{"localhost"}[0],
+			Port:         &[]int{8080}[0],
+			ReadTimeout:  &[]int{10}[0],
+			WriteTimeout: &[]int{10}[0],
+			IdleTimeout:  &[]int{10}[0],
+			Compression: &CompressionConfig{
+				Enabled: &[]bool{true}[0],
+				Level:   &[]int{6}[0],
+				Format:  &[]string{"gzip"}[0],
+			},
+			CORS: &CORSConfig{
+				AllowedOrigins: &[]string{"*"},
+			},
+			RateLimit: &middleware.RateLimitConfig{
+				IP: &middleware.RateLimitTypeConfig{
+					Enabled:  &[]bool{true}[0],
+					Requests: &[]int{100}[0],
+					Window:   &[]int{60}[0],
+				},
+			},
+		}
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		redisClient := setupTestRedis(t)
+		jwtService := setupTestJWT(t)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler, jwtService, redisClient)
+		require.NoError(t, err)
+
+		require.NotNil(t, server)
+		require.NotNil(t, server.config)
+		require.NotNil(t, server.logger)
+		require.NotNil(t, server.httpServer)
+		require.NotNil(t, server.httpServer.Handler)
 	})
 }

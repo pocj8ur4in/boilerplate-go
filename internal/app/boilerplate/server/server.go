@@ -15,6 +15,7 @@ import (
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
 	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -250,6 +251,7 @@ func New(
 	config *Config,
 	logger *logger.Logger,
 	apiHandler api.ServerInterface,
+	jwtService *jwt.JWT,
 	redis *redis.Redis,
 ) (*Server, error) {
 	// set default
@@ -267,7 +269,7 @@ func New(
 
 	// setup router and handlers
 	router := server.setupRouter(config, logger, redis)
-	httpHandler := server.setupAPIHandler(apiHandler, router)
+	httpHandler := server.setupAPIHandler(apiHandler, router, jwtService, logger)
 	server.httpServer = server.createHTTPServer(config, httpHandler)
 
 	return server, nil
@@ -348,9 +350,14 @@ func (s *Server) setupCORS(router *chi.Mux, config *Config) {
 func (s *Server) setupAPIHandler(
 	apiHandler api.ServerInterface,
 	router *chi.Mux,
+	jwtService *jwt.JWT,
+	logger *logger.Logger,
 ) http.Handler {
 	return api.HandlerWithOptions(apiHandler, api.ChiServerOptions{
 		BaseRouter: router,
+		Middlewares: []api.MiddlewareFunc{
+			middleware.JWTAuth(jwtService, logger),
+		},
 	})
 }
 

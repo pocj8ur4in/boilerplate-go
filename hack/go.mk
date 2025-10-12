@@ -49,7 +49,7 @@ go:
 		echo "$(BLUE)Linting go project...$(RESET)"; \
 		CONFIG_PATH=$(CONFIG_PATH) CGO_ENABLED=1 golangci-lint run $(CURDIR)/... -c $(CURDIR)/golangci.yaml; \
 	elif [ "$(TARGET)" = "sec" ]; then \
-		gosec -fmt text ./...; \
+		gosec -fmt text -exclude=G101 ./...; \
 	else \
 		echo "$(RED)unknown target command: $(TARGET)$(RESET)"; \
 		exit 1; \

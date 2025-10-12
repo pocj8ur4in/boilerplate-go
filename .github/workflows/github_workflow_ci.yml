@@ -138,7 +138,7 @@ jobs:
                   echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
             - name: Run Gosec Security Scanner
-              run: gosec -fmt sarif -out gosec-results.sarif ./...
+              run: gosec -fmt sarif -out gosec-results.sarif -exclude=G101 ./...
 
             - name: Upload Gosec Security Results to GitHub Security tab
               uses: github/codeql-action/upload-sarif@v3

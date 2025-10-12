@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// BearerAuthScopes defines model for BearerAuthScopes.
-var BearerAuthScopes []string = []string{"read", "write"}
+const (
+	BearerAuthScopes = "BearerAuth.Scopes"
+)
 
 // SystemHealthCheckResponse defines model for SystemHealthCheckResponse.
 type SystemHealthCheckResponse struct {
