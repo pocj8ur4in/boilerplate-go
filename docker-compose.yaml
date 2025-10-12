@@ -23,6 +23,23 @@ services:
         networks:
             - boilerplate-network
 
+    boilerplate-swagger:
+        image: swaggerapi/swagger-ui:latest
+        container_name: boilerplate-swagger
+        ports:
+            - '38081:8080'
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+        environment:
+            URLS_PRIMARY_NAME: boilerplate
+            URLS: |
+                [
+                    { url: '/docs/server.yaml', name: 'boilerplate' },
+                ]
+        volumes:
+            - ./api:/usr/share/nginx/html/docs/
+
     boilerplate-postgres:
         image: postgres:17.4
         container_name: boilerplate-postgres
