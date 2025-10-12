@@ -364,8 +364,7 @@ func TestTimeout(t *testing.T) {
 
 		handler.ServeHTTP(recorder, req)
 
-		// should timeout with 504 Gateway Timeout
-		assert.Contains(t, []int{http.StatusGatewayTimeout}, recorder.Code)
+		assert.Equal(t, http.StatusGatewayTimeout, recorder.Code)
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"go.uber.org/fx"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
@@ -56,11 +57,27 @@ type Config struct {
 
 	// MaxRequestSize is maximum request size in bytes.
 	MaxRequestSize *int64 `json:"max_request_size"`
+
+	// CORS is CORS of server.
+	CORS *CORSConfig `json:"cors"`
+}
+
+// CORSConfig represents configuration for CORS.
+type CORSConfig struct {
+	// AllowedOrigins is allowed origins of CORS.
+	AllowedOrigins *[]string `json:"allowed_origins"`
+
+	// AllowedMethods is allowed methods of CORS.
+	AllowedMethods *[]string `json:"allowed_methods"`
+
+	// AllowedHeaders is allowed headers of CORS.
+	AllowedHeaders *[]string `json:"allowed_headers"`
 }
 
 // SetDefault sets default values.
 func (c *Config) SetDefault() {
 	c.setServerDefault()
+	c.setCORSDefault()
 }
 
 // setServerDefault sets default values for server.
@@ -91,6 +108,25 @@ func (c *Config) setServerDefault() {
 
 	if c.MaxRequestSize == nil {
 		c.MaxRequestSize = &[]int64{10485760}[0] // 10MB
+	}
+}
+
+// setCORSDefault sets default values for CORS on server.
+func (c *Config) setCORSDefault() {
+	if c.CORS == nil {
+		c.CORS = &CORSConfig{}
+	}
+
+	if c.CORS.AllowedOrigins == nil {
+		c.CORS.AllowedOrigins = &[]string{"*"}
+	}
+
+	if c.CORS.AllowedMethods == nil {
+		c.CORS.AllowedMethods = &[]string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	}
+
+	if c.CORS.AllowedHeaders == nil {
+		c.CORS.AllowedHeaders = &[]string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"}
 	}
 }
 
@@ -133,6 +169,7 @@ func (s *Server) setupRouter(config *Config) *chi.Mux {
 	router := chi.NewRouter()
 
 	s.setupBasicMiddlewares(router, config)
+	s.setupCORS(router, config)
 
 	return router
 }
@@ -146,6 +183,20 @@ func (s *Server) setupBasicMiddlewares(router *chi.Mux, config *Config) {
 	router.Use(middleware.RequestSize(*config.MaxRequestSize))
 	router.Use(middleware.LogRequest(s.logger))
 	router.Use(middleware.Timeout(time.Duration(*config.ReadTimeout) * time.Second))
+}
+
+// setupCORS sets up CORS handler on router.
+func (s *Server) setupCORS(router *chi.Mux, config *Config) {
+	const corsMaxAge = 300 // 5 minutes
+
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   *config.CORS.AllowedOrigins,
+		AllowedMethods:   *config.CORS.AllowedMethods,
+		AllowedHeaders:   *config.CORS.AllowedHeaders,
+		AllowCredentials: false,
+		ExposedHeaders:   []string{"Link"},
+		MaxAge:           corsMaxAge,
+	}))
 }
 
 // setupAPIHandler sets up the API handler.

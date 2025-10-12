@@ -91,6 +91,27 @@ func TestConfigSetDefault(t *testing.T) {
 	})
 }
 
+func TestConfigSetDefaultCORS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default CORS when config is empty", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.CORS)
+		require.NotNil(t, config.CORS.AllowedOrigins)
+		require.NotNil(t, config.CORS.AllowedMethods)
+		require.NotNil(t, config.CORS.AllowedHeaders)
+
+		assert.Equal(t, []string{"*"}, *config.CORS.AllowedOrigins)
+		assert.Equal(t, []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}, *config.CORS.AllowedMethods)
+		assert.Equal(t, []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"}, *config.CORS.AllowedHeaders)
+	})
+}
+
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -100,8 +121,14 @@ func TestNew(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		cfg := &Config{
+			CORS: &CORSConfig{
+				AllowedOrigins: &[]string{"http://localhost:3000"},
+			},
+		}
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(cfg, log, mockHandler)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -150,8 +177,14 @@ func TestSetupRouter(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		cfg := &Config{
+			CORS: &CORSConfig{
+				AllowedOrigins: &[]string{"http://localhost:3000"},
+			},
+		}
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(cfg, log, mockHandler)
 		require.NoError(t, err)
 
 		router := server.setupRouter(server.config)
@@ -486,5 +519,191 @@ func TestServerMetricsEndpoint(t *testing.T) {
 
 		// verify response
 		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+}
+
+func TestCORSDefaultAllowedOrigins(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CORS has default allowed origins", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.CORS)
+		require.NotNil(t, config.CORS.AllowedOrigins)
+		assert.Equal(t, []string{"*"}, *config.CORS.AllowedOrigins)
+	})
+}
+
+func TestCORSAllowedMethods(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CORS has default allowed methods", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.CORS)
+		require.NotNil(t, config.CORS.AllowedMethods)
+		assert.Equal(t, []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}, *config.CORS.AllowedMethods)
+	})
+}
+
+func TestCORSAllowedHeaders(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CORS has default allowed headers", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.CORS)
+		require.NotNil(t, config.CORS.AllowedHeaders)
+		assert.Equal(t, []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"}, *config.CORS.AllowedHeaders)
+	})
+}
+
+func TestCORSCustomConfiguration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("custom CORS configuration", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			CORS: &CORSConfig{
+				AllowedOrigins: &[]string{"https://example.com"},
+				AllowedMethods: &[]string{"GET", "POST"},
+				AllowedHeaders: &[]string{"Content-Type"},
+			},
+		}
+		config.SetDefault()
+
+		require.NotNil(t, config.CORS)
+		assert.Equal(t, []string{"https://example.com"}, *config.CORS.AllowedOrigins)
+		assert.Equal(t, []string{"GET", "POST"}, *config.CORS.AllowedMethods)
+		assert.Equal(t, []string{"Content-Type"}, *config.CORS.AllowedHeaders)
+	})
+}
+
+func TestCORSHeaders(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CORS headers are set in response", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request with Origin header
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		req.Header.Set("Origin", "http://localhost:3000")
+
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify CORS headers are present
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.NotEmpty(t, recorder.Header().Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("CORS handles preflight requests", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// create preflight request
+		req := httptest.NewRequest(http.MethodOptions, "/status", nil)
+		req.Header.Set("Origin", "http://localhost:3000")
+		req.Header.Set("Access-Control-Request-Method", "GET")
+
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify preflight response is successful
+		assert.Contains(t, []int{http.StatusOK, http.StatusNoContent}, recorder.Code)
+	})
+}
+
+func TestCORSCustomOrigins(t *testing.T) {
+	t.Parallel()
+
+	t.Run("custom CORS origins are respected", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			CORS: &CORSConfig{
+				AllowedOrigins: &[]string{"https://example.com"},
+				AllowedMethods: &[]string{"GET", "POST"},
+				AllowedHeaders: &[]string{"Content-Type"},
+			},
+		}
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request with allowed origin
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		req.Header.Set("Origin", "https://example.com")
+
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response and CORS header
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Equal(t, "https://example.com", recorder.Header().Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("disallowed origin is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			CORS: &CORSConfig{
+				AllowedOrigins: &[]string{"https://example.com"},
+				AllowedMethods: &[]string{"GET", "POST"},
+				AllowedHeaders: &[]string{"Content-Type"},
+			},
+		}
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request with disallowed origin
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		req.Header.Set("Origin", "https://evil.com")
+
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify CORS header is not set for disallowed origin
+		assert.Empty(t, recorder.Header().Get("Access-Control-Allow-Origin"))
 	})
 }
