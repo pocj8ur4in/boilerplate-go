@@ -14,7 +14,7 @@ import (
 func TestStatusCheck(t *testing.T) {
 	t.Parallel()
 
-	t.Run("status check returns not implemented", func(t *testing.T) {
+	t.Run("status check returns ok", func(t *testing.T) {
 		t.Parallel()
 
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
@@ -32,7 +32,7 @@ func TestStatusCheck(t *testing.T) {
 		handler.StatusCheck(recorder, req)
 
 		// verify response
-		assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+		assert.Equal(t, http.StatusOK, recorder.Code)
 		assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 	})
 
@@ -57,7 +57,7 @@ func TestStatusCheck(t *testing.T) {
 
 				handler.StatusCheck(recorder, req)
 
-				assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+				assert.Equal(t, http.StatusOK, recorder.Code)
 			})
 		}
 	})
@@ -184,7 +184,13 @@ func TestSystemHandlersIntegration(t *testing.T) {
 
 				endpoint.handler(recorder, req)
 
-				assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+				// StatusCheck returns OK, others return NotImplemented
+				expectedStatus := http.StatusNotImplemented
+				if endpoint.name == "status" {
+					expectedStatus = http.StatusOK
+				}
+
+				assert.Equal(t, expectedStatus, recorder.Code)
 				assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 			})
 		}

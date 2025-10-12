@@ -6,7 +6,7 @@ import (
 
 // StatusCheck handles GET /status endpoint.
 func (h *Handler) StatusCheck(writer http.ResponseWriter, _ *http.Request) {
-	h.sendResponse(writer, http.StatusNotImplemented, map[string]interface{}{})
+	h.sendResponse(writer, http.StatusOK, map[string]interface{}{})
 }
 
 // HealthCheck handles GET /health endpoint.
