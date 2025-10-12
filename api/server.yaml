@@ -1,0 +1,35 @@
+# swagger.yaml
+openapi: 3.0.0
+
+# info
+info:
+    title: boilerplate API
+    version: 0.0.0
+    description: boilerplate API Documentation
+    license:
+        name: MIT
+        url: https://opensource.org/licenses/MIT
+
+# servers
+servers:
+    - url: http://localhost:38080
+      description: local
+
+# paths
+paths:
+    /status:
+        $ref: "./status.yaml"
+    /health:
+        $ref: "./health.yaml"
+    /metrics:
+        $ref: "./metrics.yaml"
+
+# components
+components:
+    schemas:
+        $ref: "./schemas.yaml"
+    securitySchemes:
+        BearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT

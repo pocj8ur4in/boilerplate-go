@@ -1,0 +1,31 @@
+# System
+SystemHealthCheckResponse:
+    type: object
+    required:
+        - services
+        - timestamp
+    properties:
+        services:
+            $ref: "#/SystemHealthCheckResponseServices"
+        timestamp:
+            type: string
+            format: date-time
+            description: check time
+    example:
+        services:
+            database: true
+            redis: true
+        timestamp: "2024-01-01T00:00:00Z"
+
+SystemHealthCheckResponseServices:
+    type: object
+    required:
+        - database
+        - redis
+    properties:
+        database:
+            type: boolean
+            description: is database health check passed
+        redis:
+            type: boolean
+            description: is redis health check passed

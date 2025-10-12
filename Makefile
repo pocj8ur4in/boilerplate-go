@@ -170,6 +170,15 @@ prepare:
 		echo "$(BLUE)swagger-cli is already installed: $(shell swagger-cli --version)$(RESET)"; \
 	fi
 
+	@echo "$(BLUE)Checking oapi-codegen...$(RESET)"
+	@if ! command -v oapi-codegen > /dev/null; then \
+		echo "$(YELLOW)oapi-codegen is not installed. installing oapi-codegen...$(RESET)"; \
+		go install github.com/deepmap/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0; \
+		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
+	else \
+		echo "$(BLUE)oapi-codegen is already installed: $(shell oapi-codegen --version)$(RESET)"; \
+	fi
+
 	@echo "$(BLUE)Preparing go project...$(RESET)"
 	go mod download;
 	go mod tidy;

@@ -1,0 +1,14 @@
+# /health
+get:
+    operationId: HealthCheck
+    summary: health check
+    description: check the health of the server and dependencies.
+    tags:
+        - system
+    responses:
+        200:
+            description: OK
+            content:
+                application/json:
+                    schema:
+                        $ref: "./schemas.yaml#/SystemHealthCheckResponse"

@@ -1,0 +1,15 @@
+# /status
+get:
+    operationId: StatusCheck
+    summary: status check
+    description: check the status of the server.
+    tags:
+        - system
+    responses:
+        200:
+            description: OK
+            content:
+                application/json:
+                    schema:
+                        type: object
+                        example: {}
