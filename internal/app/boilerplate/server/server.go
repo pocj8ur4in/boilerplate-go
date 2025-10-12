@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
 
@@ -103,6 +104,7 @@ func NewModule() fx.Option {
 func New(
 	config *Config,
 	logger *logger.Logger,
+	apiHandler api.ServerInterface,
 ) (*Server, error) {
 	// set default
 	if config == nil {
@@ -119,7 +121,7 @@ func New(
 
 	// setup router and handlers
 	router := server.setupRouter()
-	httpHandler := server.setupAPIHandler(router)
+	httpHandler := server.setupAPIHandler(apiHandler, router)
 	server.httpServer = server.createHTTPServer(config, httpHandler)
 
 	return server, nil
@@ -134,9 +136,12 @@ func (s *Server) setupRouter() *chi.Mux {
 
 // setupAPIHandler sets up the API handler.
 func (s *Server) setupAPIHandler(
+	apiHandler api.ServerInterface,
 	router *chi.Mux,
 ) http.Handler {
-	return router
+	return api.HandlerWithOptions(apiHandler, api.ChiServerOptions{
+		BaseRouter: router,
+	})
 }
 
 // createHTTPServer creates the HTTP server.

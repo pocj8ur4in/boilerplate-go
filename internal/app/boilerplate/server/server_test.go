@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -10,6 +12,24 @@ import (
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
+
+// mockAPIHandler is a mock implementation of api.ServerInterface.
+type mockAPIHandler struct{}
+
+// StatusCheck handles GET /status endpoint.
+func (m *mockAPIHandler) StatusCheck(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+// HealthCheck handles GET /health endpoint.
+func (m *mockAPIHandler) HealthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+// HandleMetrics handles GET /metrics endpoint.
+func (m *mockAPIHandler) HandleMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
 
 func TestConfigSetDefault(t *testing.T) {
 	t.Parallel()
@@ -80,7 +100,8 @@ func TestNew(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(nil, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -105,7 +126,8 @@ func TestNew(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(config, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -128,7 +150,8 @@ func TestSetupRouter(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(nil, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
 		require.NoError(t, err)
 
 		router := server.setupRouter()
@@ -146,11 +169,12 @@ func TestSetupAPIHandler(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(nil, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
 		require.NoError(t, err)
 
 		router := server.setupRouter()
-		handler := server.setupAPIHandler(router)
+		handler := server.setupAPIHandler(mockHandler, router)
 
 		require.NotNil(t, handler)
 	})
@@ -168,11 +192,12 @@ func TestCreateHTTPServer(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(config, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
 		require.NoError(t, err)
 
 		router := server.setupRouter()
-		handler := server.setupAPIHandler(router)
+		handler := server.setupAPIHandler(mockHandler, router)
 		httpServer := server.createHTTPServer(config, handler)
 
 		require.NotNil(t, httpServer)
@@ -198,11 +223,12 @@ func TestCreateHTTPServer(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(config, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
 		require.NoError(t, err)
 
 		router := server.setupRouter()
-		handler := server.setupAPIHandler(router)
+		handler := server.setupAPIHandler(mockHandler, router)
 		httpServer := server.createHTTPServer(config, handler)
 
 		require.NotNil(t, httpServer)
@@ -223,7 +249,8 @@ func TestShutdown(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
-		server, err := New(nil, log)
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -244,5 +271,220 @@ func TestNewModule(t *testing.T) {
 		module := NewModule()
 
 		require.NotNil(t, module)
+	})
+}
+
+func TestServerInvalidEndpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("handle invalid endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request for non-existent endpoint
+		req := httptest.NewRequest(http.MethodGet, "/invalid", nil)
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response - should return 404
+		assert.Equal(t, http.StatusNotFound, recorder.Code)
+	})
+}
+
+func TestServerHTTPMethods(t *testing.T) {
+	t.Parallel()
+
+	t.Run("test different HTTP methods on status endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		methods := []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+			http.MethodPatch,
+		}
+
+		for _, method := range methods {
+			t.Run(method, func(t *testing.T) {
+				t.Parallel()
+
+				req := httptest.NewRequest(method, "/status", nil)
+				recorder := httptest.NewRecorder()
+
+				server.httpServer.Handler.ServeHTTP(recorder, req)
+
+				// status endpoint should only accept GET
+				if method == http.MethodGet {
+					assert.Equal(t, http.StatusOK, recorder.Code)
+				} else {
+					assert.NotEqual(t, http.StatusOK, recorder.Code)
+				}
+			})
+		}
+	})
+}
+
+func TestServerHandlerIntegration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("verify handler is properly integrated", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// verify server components
+		require.NotNil(t, server.httpServer)
+		require.NotNil(t, server.httpServer.Handler)
+
+		// test that the handler responds to requests
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		recorder := httptest.NewRecorder()
+
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+
+	t.Run("verify router is properly set up", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		router := server.setupRouter()
+		require.NotNil(t, router)
+
+		// verify router can be used to create handler
+		handler := server.setupAPIHandler(mockHandler, router)
+		require.NotNil(t, handler)
+	})
+}
+
+func TestServerConfiguration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("server uses config values correctly", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Host:         &[]string{"127.0.0.1"}[0],
+			Port:         &[]int{3000}[0],
+			ReadTimeout:  &[]int{5}[0],
+			WriteTimeout: &[]int{5}[0],
+			IdleTimeout:  &[]int{5}[0],
+		}
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
+		require.NoError(t, err)
+
+		// verify config is applied to HTTP server
+		assert.Equal(t, "127.0.0.1:3000", server.httpServer.Addr)
+		assert.Equal(t, 5*time.Second, server.httpServer.ReadTimeout)
+		assert.Equal(t, 5*time.Second, server.httpServer.WriteTimeout)
+		assert.Equal(t, 5*time.Second, server.httpServer.IdleTimeout)
+	})
+}
+
+func TestServerStatusEndpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("handle status endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response
+		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+}
+
+func TestServerHealthEndpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("handle health endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response
+		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+}
+
+func TestServerMetricsEndpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("handle metrics endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(nil, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response
+		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
 }
