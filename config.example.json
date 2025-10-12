@@ -11,5 +11,10 @@
     "ssl_mode": false,
     "max_conns": 10,
     "max_idle": 5
+  },
+  "redis": {
+    "addrs": ["localhost:36379"],
+    "password": "",
+    "db": 0
   }
 }

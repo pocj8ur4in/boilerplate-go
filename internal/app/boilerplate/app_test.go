@@ -13,6 +13,7 @@ import (
 
 	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
+	redisPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
 // setupTestConfig creates a temporary config file and sets the environment variable.
@@ -62,6 +63,11 @@ func TestNew(t *testing.T) {
 				"db_name": "boilerplate",
 				"ssl_mode": false
 			},
+			"redis": {
+				"addrs": ["localhost:36379"],
+				"password": "",
+				"db": 0
+			},
 			"logger": {
 				"level": "info"
 			}
@@ -84,6 +90,11 @@ func TestNewWithStart(t *testing.T) {
 				"password": "boilerplate_password",
 				"db_name": "boilerplate",
 				"ssl_mode": false
+			},
+			"redis": {
+				"addrs": ["localhost:36379"],
+				"password": "",
+				"db": 0
 			},
 			"logger": {
 				"level": "info"
@@ -108,6 +119,11 @@ func TestRegisterHooks(t *testing.T) {
 				"password": "boilerplate_password",
 				"db_name": "boilerplate",
 				"ssl_mode": false
+			},
+			"redis": {
+				"addrs": ["localhost:36379"],
+				"password": "",
+				"db": 0
 			},
 			"logger": {
 				"level": "info"
@@ -145,10 +161,11 @@ func TestRegisterHooksDirectly(t *testing.T) {
 		logger, err := loggerPkg.New(&loggerPkg.Config{Level: &level})
 		require.NoError(t, err)
 
-		// create a minimal DB structure (actually won't call Close on it)
+		// create minimal structures (won't actually call Close on them)
 		dbConn := &databasePkg.DB{DB: &sql.DB{}}
+		redisConn := &redisPkg.Redis{}
 
-		registerHooks(lifecycle, dbConn, logger)
+		registerHooks(lifecycle, dbConn, logger, redisConn)
 
 		require.True(t, hookRegistered, "lifecycle hook should be registered")
 		require.True(t, onStartCalled, "OnStart should be called successfully")
@@ -198,6 +215,19 @@ func TestNewWithCustomConfig(t *testing.T) {
 			},
 			"logger": {
 				"level": "debug"
+			},
+			"database": {
+				"host": "localhost",
+				"port": 35432,
+				"user": "boilerplate_user",
+				"password": "boilerplate_password",
+				"db_name": "boilerplate",
+				"ssl_mode": false
+			},
+			"redis": {
+				"addrs": ["localhost:36379"],
+				"password": "",
+				"db": 0
 			}
 		}`
 		setupTestConfig(t, content)

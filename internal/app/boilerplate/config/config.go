@@ -11,6 +11,7 @@ import (
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
 // NewModule provides module for config.
@@ -20,6 +21,7 @@ func NewModule() fx.Option {
 			LoadFromFile,
 			ProvideLoggerConfig,
 			ProvideDatabaseConfig,
+			ProvideRedisConfig,
 		),
 	)
 }
@@ -31,6 +33,9 @@ type Config struct {
 
 	// Database provides database configuration.
 	Database *database.Config `json:"database"`
+
+	// Redis provides redis configuration.
+	Redis *redis.Config `json:"redis"`
 }
 
 // SetDefault sets the default values.
@@ -48,6 +53,13 @@ func (c *Config) SetDefault() {
 	}
 
 	c.Database.SetDefault()
+
+	// set redis
+	if c.Redis == nil {
+		c.Redis = &redis.Config{}
+	}
+
+	c.Redis.SetDefault()
 }
 
 // New creates a new configuration.
@@ -108,4 +120,9 @@ func ProvideLoggerConfig(config *Config) *logger.Config {
 // ProvideDatabaseConfig provides database configuration.
 func ProvideDatabaseConfig(config *Config) *database.Config {
 	return config.Database
+}
+
+// ProvideRedisConfig provides redis configuration.
+func ProvideRedisConfig(config *Config) *redis.Config {
+	return config.Redis
 }

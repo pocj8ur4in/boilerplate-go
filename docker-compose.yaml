@@ -17,6 +17,8 @@ services:
         depends_on:
             boilerplate-postgres:
                 condition: service_healthy
+            boilerplate-redis:
+                condition: service_healthy
         restart: unless-stopped
         networks:
             - boilerplate-network
@@ -41,8 +43,25 @@ services:
             timeout: 5s
             retries: 5
 
+    boilerplate-redis:
+        image: redis:7-alpine
+        container_name: boilerplate-redis
+        ports:
+            - '36379:6379'
+        volumes:
+            - redis_data:/data
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
 volumes:
     postgres_data:
+    redis_data:
 
 networks:
     boilerplate-network:

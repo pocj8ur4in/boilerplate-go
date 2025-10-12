@@ -10,6 +10,7 @@ import (
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
 func TestConfigSetDefault(t *testing.T) {
@@ -301,5 +302,84 @@ func TestProvideDatabaseConfig(t *testing.T) {
 		dbConfig := ProvideDatabaseConfig(config)
 
 		assert.Nil(t, dbConfig)
+	})
+}
+
+func TestProvideRedisConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return redis config from config", func(t *testing.T) {
+		t.Parallel()
+
+		password := "test_password"
+		redisDB := 0
+
+		config := &Config{
+			Redis: &redis.Config{
+				Addrs:    []string{"localhost:6379"},
+				Password: &password,
+				DB:       &redisDB,
+			},
+		}
+
+		redisConfig := ProvideRedisConfig(config)
+
+		require.NotNil(t, redisConfig)
+		require.NotNil(t, redisConfig.Addrs)
+		require.NotNil(t, redisConfig.Password)
+		require.NotNil(t, redisConfig.DB)
+		assert.Equal(t, []string{"localhost:6379"}, redisConfig.Addrs)
+		assert.Equal(t, "test_password", *redisConfig.Password)
+		assert.Equal(t, 0, *redisConfig.DB)
+	})
+
+	t.Run("return nil when config.Redis is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		redisConfig := ProvideRedisConfig(config)
+
+		assert.Nil(t, redisConfig)
+	})
+}
+
+func TestConfigSetDefaultRedis(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default redis when config.Redis is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Redis)
+		require.NotNil(t, config.Redis.Addrs)
+		assert.Equal(t, []string{"localhost:6379"}, config.Redis.Addrs)
+	})
+
+	t.Run("keep existing redis when config.Redis is already set", func(t *testing.T) {
+		t.Parallel()
+
+		password := "test_password"
+		db := 1
+		config := &Config{
+			Redis: &redis.Config{
+				Addrs:    []string{"redis1:6379"},
+				Password: &password,
+				DB:       &db,
+			},
+		}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Redis)
+		require.NotNil(t, config.Redis.Addrs)
+		require.NotNil(t, config.Redis.Password)
+		require.NotNil(t, config.Redis.DB)
+		assert.Equal(t, []string{"redis1:6379"}, config.Redis.Addrs)
+		assert.Equal(t, "test_password", *config.Redis.Password)
+		assert.Equal(t, 1, *config.Redis.DB)
 	})
 }
