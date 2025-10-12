@@ -1,0 +1,30 @@
+global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+
+scrape_configs:
+    - job_name: "prometheus"
+      static_configs:
+          - targets: ["localhost:9090"]
+
+    - job_name: "boilerplate-server"
+      metrics_path: "/metrics"
+      static_configs:
+          - targets: ["boilerplate-server:8080"]
+            labels:
+                service: "boilerplate"
+                environment: "development"
+
+    - job_name: "redis"
+      static_configs:
+          - targets: ["boilerplate-redis-exporter:9121"]
+            labels:
+                service: "redis"
+                environment: "development"
+
+    - job_name: "postgresql"
+      static_configs:
+          - targets: ["boilerplate-postgres-exporter:9187"]
+            labels:
+                service: "postgresql"
+                environment: "development"
