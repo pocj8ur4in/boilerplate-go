@@ -233,7 +233,7 @@ func TestGlobalRateLimit(t *testing.T) {
 		redisClient := setupTestRedis(t)
 		log := setupTestLogger(t)
 
-		middleware := GlobalRateLimit(10, 60*time.Second, redisClient, log)
+		middleware := GlobalRateLimit(10, 1*time.Second, redisClient, log)
 		handler := createTestRateLimitHandler(t, middleware)
 
 		// make requests
@@ -248,6 +248,9 @@ func TestGlobalRateLimit(t *testing.T) {
 			assert.NotEmpty(t, recorder.Header().Get("X-Ratelimit-Remaining"))
 			assert.NotEmpty(t, recorder.Header().Get("X-Ratelimit-Reset"))
 		}
+
+		// wait for rate limit window to expire
+		time.Sleep(1100 * time.Millisecond)
 	})
 
 	t.Run("reject requests exceeding limit", func(t *testing.T) {
@@ -255,7 +258,7 @@ func TestGlobalRateLimit(t *testing.T) {
 		log := setupTestLogger(t)
 
 		limit := 3
-		middleware := GlobalRateLimit(limit, 60*time.Second, redisClient, log)
+		middleware := GlobalRateLimit(limit, 1*time.Second, redisClient, log)
 		handler := createTestRateLimitHandler(t, middleware)
 
 		// make requests up to limit
@@ -292,7 +295,7 @@ func TestIPRateLimit(t *testing.T) {
 		testRateLimitingBehavior(
 			t,
 			func(redis *redis.Redis, log *logger.Logger) func(http.Handler) http.Handler {
-				return IPRateLimit(limit, 60*time.Second, redis, log)
+				return IPRateLimit(limit, 1*time.Second, redis, log)
 			},
 			limit,
 			func(req *http.Request) { req.Header.Set("X-Forwarded-For", testIP1) },
@@ -309,7 +312,7 @@ func TestEndpointRateLimit(t *testing.T) {
 		log := setupTestLogger(t)
 
 		limit := 3
-		middleware := EndpointRateLimit(limit, 60*time.Second, redisClient, log)
+		middleware := EndpointRateLimit(limit, 1*time.Second, redisClient, log)
 		handler := createTestRateLimitHandler(t, middleware)
 
 		// make requests to /test endpoint
@@ -357,7 +360,7 @@ func TestRateLimitHeaders(t *testing.T) {
 		log := setupTestLogger(t)
 
 		limit := 10
-		middleware := GlobalRateLimit(limit, 60*time.Second, redisClient, log)
+		middleware := GlobalRateLimit(limit, 1*time.Second, redisClient, log)
 		handler := createTestRateLimitHandler(t, middleware)
 
 		// make request
