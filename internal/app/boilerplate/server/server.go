@@ -16,6 +16,7 @@ import (
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
 	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
 var (
@@ -63,6 +64,9 @@ type Config struct {
 
 	// CORS is CORS of server.
 	CORS *CORSConfig `json:"cors"`
+
+	// RateLimit is rate limit of server.
+	RateLimit *middleware.RateLimitConfig `json:"rate_limit"`
 }
 
 // CompressionConfig represents configuration for compression.
@@ -94,6 +98,7 @@ func (c *Config) SetDefault() {
 	c.setServerDefault()
 	c.setCompressionDefault()
 	c.setCORSDefault()
+	c.setRateLimitDefault()
 }
 
 // setServerDefault sets default values for server.
@@ -165,6 +170,74 @@ func (c *Config) setCORSDefault() {
 	}
 }
 
+// setRateLimitDefault sets default values for rate limit on server.
+func (c *Config) setRateLimitDefault() {
+	if c.RateLimit == nil {
+		c.RateLimit = &middleware.RateLimitConfig{}
+	}
+
+	c.setGlobalRateLimitDefault()
+	c.setIPRateLimitDefault()
+	c.setEndpointRateLimitDefault()
+}
+
+// setGlobalRateLimitDefault sets default values for global rate limit.
+func (c *Config) setGlobalRateLimitDefault() {
+	if c.RateLimit.Global == nil {
+		c.RateLimit.Global = &middleware.RateLimitTypeConfig{}
+	}
+
+	if c.RateLimit.Global.Enabled == nil {
+		c.RateLimit.Global.Enabled = &[]bool{false}[0]
+	}
+
+	if c.RateLimit.Global.Requests == nil {
+		c.RateLimit.Global.Requests = &[]int{1000}[0]
+	}
+
+	if c.RateLimit.Global.Window == nil {
+		c.RateLimit.Global.Window = &[]int{60}[0]
+	}
+}
+
+// setIPRateLimitDefault sets default values for IP rate limit.
+func (c *Config) setIPRateLimitDefault() {
+	if c.RateLimit.IP == nil {
+		c.RateLimit.IP = &middleware.RateLimitTypeConfig{}
+	}
+
+	if c.RateLimit.IP.Enabled == nil {
+		c.RateLimit.IP.Enabled = &[]bool{true}[0]
+	}
+
+	if c.RateLimit.IP.Requests == nil {
+		c.RateLimit.IP.Requests = &[]int{100}[0]
+	}
+
+	if c.RateLimit.IP.Window == nil {
+		c.RateLimit.IP.Window = &[]int{60}[0]
+	}
+}
+
+// setEndpointRateLimitDefault sets default values for endpoint rate limit.
+func (c *Config) setEndpointRateLimitDefault() {
+	if c.RateLimit.Endpoint == nil {
+		c.RateLimit.Endpoint = &middleware.RateLimitTypeConfig{}
+	}
+
+	if c.RateLimit.Endpoint.Enabled == nil {
+		c.RateLimit.Endpoint.Enabled = &[]bool{false}[0]
+	}
+
+	if c.RateLimit.Endpoint.Requests == nil {
+		c.RateLimit.Endpoint.Requests = &[]int{50}[0]
+	}
+
+	if c.RateLimit.Endpoint.Window == nil {
+		c.RateLimit.Endpoint.Window = &[]int{60}[0]
+	}
+}
+
 // NewModule provides module for server.
 func NewModule() fx.Option {
 	return fx.Module("server",
@@ -177,6 +250,7 @@ func New(
 	config *Config,
 	logger *logger.Logger,
 	apiHandler api.ServerInterface,
+	redis *redis.Redis,
 ) (*Server, error) {
 	// set default
 	if config == nil {
@@ -192,7 +266,7 @@ func New(
 	}
 
 	// setup router and handlers
-	router := server.setupRouter(config)
+	router := server.setupRouter(config, logger, redis)
 	httpHandler := server.setupAPIHandler(apiHandler, router)
 	server.httpServer = server.createHTTPServer(config, httpHandler)
 
@@ -200,10 +274,11 @@ func New(
 }
 
 // setupRouter sets up the router.
-func (s *Server) setupRouter(config *Config) *chi.Mux {
+func (s *Server) setupRouter(config *Config, logger *logger.Logger, redis *redis.Redis) *chi.Mux {
 	router := chi.NewRouter()
 
 	s.setupBasicMiddlewares(router, config)
+	s.setupRateLimitMiddlewares(router, config, redis, logger)
 	s.setupCORS(router, config)
 
 	return router
@@ -223,6 +298,36 @@ func (s *Server) setupBasicMiddlewares(router *chi.Mux, config *Config) {
 
 	router.Use(middleware.LogRequest(s.logger))
 	router.Use(middleware.Timeout(time.Duration(*config.ReadTimeout) * time.Second))
+}
+
+// setupRateLimitMiddlewares sets up rate limit middlewares.
+func (s *Server) setupRateLimitMiddlewares(router *chi.Mux, config *Config, redis *redis.Redis, logger *logger.Logger) {
+	if *config.RateLimit.Global.Enabled {
+		router.Use(middleware.GlobalRateLimit(
+			*config.RateLimit.Global.Requests,
+			time.Duration(*config.RateLimit.Global.Window)*time.Second,
+			redis,
+			logger,
+		))
+	}
+
+	if *config.RateLimit.IP.Enabled {
+		router.Use(middleware.IPRateLimit(
+			*config.RateLimit.IP.Requests,
+			time.Duration(*config.RateLimit.IP.Window)*time.Second,
+			redis,
+			logger,
+		))
+	}
+
+	if *config.RateLimit.Endpoint.Enabled {
+		router.Use(middleware.EndpointRateLimit(
+			*config.RateLimit.Endpoint.Requests,
+			time.Duration(*config.RateLimit.Endpoint.Window)*time.Second,
+			redis,
+			logger,
+		))
+	}
 }
 
 // setupCORS sets up CORS handler on router.

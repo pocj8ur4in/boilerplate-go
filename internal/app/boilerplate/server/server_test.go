@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
 // mockAPIHandler is a mock implementation of api.ServerInterface.
@@ -29,6 +31,31 @@ func (m *mockAPIHandler) HealthCheck(w http.ResponseWriter, _ *http.Request) {
 // HandleMetrics handles GET /metrics endpoint.
 func (m *mockAPIHandler) HandleMetrics(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+// setupTestRedis creates a test redis client.
+func setupTestRedis(t *testing.T) *redis.Redis {
+	t.Helper()
+
+	password := ""
+	db := 0
+	redisConfig := &redis.Config{
+		Addrs:    []string{"localhost:36379"},
+		Password: &password,
+		DB:       &db,
+	}
+
+	redisClient, err := redis.New(redisConfig)
+	require.NoError(t, err)
+
+	// flush DB to ensure clean state
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = redisClient.FlushDB(ctx).Err()
+	require.NoError(t, err)
+
+	return redisClient
 }
 
 func TestConfigSetDefault(t *testing.T) {
@@ -112,6 +139,47 @@ func TestConfigSetDefaultCompression(t *testing.T) {
 	})
 }
 
+func TestConfigSetDefaultRateLimit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default rate limit when config is empty", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.RateLimit)
+		require.NotNil(t, config.RateLimit.Global)
+		require.NotNil(t, config.RateLimit.IP)
+		require.NotNil(t, config.RateLimit.Endpoint)
+
+		// verify global rate limit defaults
+		require.NotNil(t, config.RateLimit.Global.Enabled)
+		require.NotNil(t, config.RateLimit.Global.Requests)
+		require.NotNil(t, config.RateLimit.Global.Window)
+		assert.False(t, *config.RateLimit.Global.Enabled)
+		assert.Equal(t, 1000, *config.RateLimit.Global.Requests)
+		assert.Equal(t, 60, *config.RateLimit.Global.Window)
+
+		// verify IP rate limit defaults
+		require.NotNil(t, config.RateLimit.IP.Enabled)
+		require.NotNil(t, config.RateLimit.IP.Requests)
+		require.NotNil(t, config.RateLimit.IP.Window)
+		assert.True(t, *config.RateLimit.IP.Enabled)
+		assert.Equal(t, 100, *config.RateLimit.IP.Requests)
+		assert.Equal(t, 60, *config.RateLimit.IP.Window)
+
+		// verify endpoint rate limit defaults
+		require.NotNil(t, config.RateLimit.Endpoint.Enabled)
+		require.NotNil(t, config.RateLimit.Endpoint.Requests)
+		require.NotNil(t, config.RateLimit.Endpoint.Window)
+		assert.False(t, *config.RateLimit.Endpoint.Enabled)
+		assert.Equal(t, 50, *config.RateLimit.Endpoint.Requests)
+		assert.Equal(t, 60, *config.RateLimit.Endpoint.Window)
+	})
+}
+
 func TestConfigSetDefaultCORS(t *testing.T) {
 	t.Parallel()
 
@@ -142,6 +210,8 @@ func TestNew(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		cfg := &Config{
 			CORS: &CORSConfig{
 				AllowedOrigins: &[]string{"http://localhost:3000"},
@@ -149,7 +219,7 @@ func TestNew(t *testing.T) {
 		}
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(cfg, log, mockHandler)
+		server, err := New(cfg, log, mockHandler, redisClient)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -174,8 +244,10 @@ func TestNew(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
+		server, err := New(config, log, mockHandler, redisClient)
 
 		require.NoError(t, err)
 		require.NotNil(t, server)
@@ -198,6 +270,8 @@ func TestSetupRouter(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		cfg := &Config{
 			CORS: &CORSConfig{
 				AllowedOrigins: &[]string{"http://localhost:3000"},
@@ -205,10 +279,10 @@ func TestSetupRouter(t *testing.T) {
 		}
 
 		mockHandler := &mockAPIHandler{}
-		server, err := New(cfg, log, mockHandler)
+		server, err := New(cfg, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(server.config)
+		router := server.setupRouter(server.config, log, redisClient)
 
 		require.NotNil(t, router)
 	})
@@ -223,15 +297,36 @@ func TestSetupAPIHandler(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(server.config)
+		router := server.setupRouter(server.config, log, redisClient)
 		handler := server.setupAPIHandler(mockHandler, router)
 
 		require.NotNil(t, handler)
 	})
+}
+
+// verifyHTTPServer verifies the HTTP server configuration.
+func verifyHTTPServer(
+	t *testing.T,
+	httpServer *http.Server,
+	expectedAddr string,
+	expectedReadTimeout time.Duration,
+	expectedWriteTimeout time.Duration,
+	expectedIdleTimeout time.Duration,
+) {
+	t.Helper()
+
+	require.NotNil(t, httpServer)
+	assert.Equal(t, expectedAddr, httpServer.Addr)
+	assert.Equal(t, expectedReadTimeout, httpServer.ReadTimeout)
+	assert.Equal(t, expectedWriteTimeout, httpServer.WriteTimeout)
+	assert.Equal(t, expectedIdleTimeout, httpServer.IdleTimeout)
+	assert.NotNil(t, httpServer.Handler)
 }
 
 func TestCreateHTTPServer(t *testing.T) {
@@ -246,20 +341,18 @@ func TestCreateHTTPServer(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
+		server, err := New(config, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(config)
+		router := server.setupRouter(config, log, redisClient)
 		handler := server.setupAPIHandler(mockHandler, router)
 		httpServer := server.createHTTPServer(config, handler)
 
-		require.NotNil(t, httpServer)
-		assert.Equal(t, "localhost:8080", httpServer.Addr)
-		assert.Equal(t, 10*time.Second, httpServer.ReadTimeout)
-		assert.Equal(t, 10*time.Second, httpServer.WriteTimeout)
-		assert.Equal(t, 10*time.Second, httpServer.IdleTimeout)
-		assert.NotNil(t, httpServer.Handler)
+		verifyHTTPServer(t, httpServer, "localhost:8080",
+			10*time.Second, 10*time.Second, 10*time.Second)
 	})
 
 	t.Run("create HTTP server with custom config", func(t *testing.T) {
@@ -277,20 +370,18 @@ func TestCreateHTTPServer(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
+		server, err := New(config, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(config)
+		router := server.setupRouter(config, log, redisClient)
 		handler := server.setupAPIHandler(mockHandler, router)
 		httpServer := server.createHTTPServer(config, handler)
 
-		require.NotNil(t, httpServer)
-		assert.Equal(t, "0.0.0.0:9090", httpServer.Addr)
-		assert.Equal(t, 20*time.Second, httpServer.ReadTimeout)
-		assert.Equal(t, 30*time.Second, httpServer.WriteTimeout)
-		assert.Equal(t, 40*time.Second, httpServer.IdleTimeout)
-		assert.NotNil(t, httpServer.Handler)
+		verifyHTTPServer(t, httpServer, "0.0.0.0:9090",
+			20*time.Second, 30*time.Second, 40*time.Second)
 	})
 }
 
@@ -303,8 +394,10 @@ func TestShutdown(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -337,8 +430,10 @@ func TestServerInvalidEndpoint(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request for non-existent endpoint
@@ -362,8 +457,10 @@ func TestServerHTTPMethods(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		methods := []string{
@@ -403,8 +500,10 @@ func TestServerHandlerIntegration(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// verify server components
@@ -426,11 +525,13 @@ func TestServerHandlerIntegration(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(server.config)
+		router := server.setupRouter(server.config, log, redisClient)
 		require.NotNil(t, router)
 
 		// verify router can be used to create handler
@@ -456,8 +557,10 @@ func TestServerConfiguration(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
+		server, err := New(config, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// verify config is applied to HTTP server
@@ -477,8 +580,10 @@ func TestServerStatusEndpoint(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request
@@ -502,8 +607,10 @@ func TestServerHealthEndpoint(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request
@@ -527,8 +634,10 @@ func TestServerMetricsEndpoint(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request
@@ -625,8 +734,10 @@ func TestCompressionInResponse(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
+		server, err := New(config, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request with Accept-Encoding header
@@ -654,8 +765,10 @@ func TestCompressionInResponse(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
+		server, err := New(config, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request with Accept-Encoding header
@@ -672,6 +785,114 @@ func TestCompressionInResponse(t *testing.T) {
 
 		// Content-Encoding should not be set when compression is disabled
 		assert.Empty(t, recorder.Header().Get("Content-Encoding"))
+	})
+}
+
+// verifyRateLimitConfig verifies the rate limit type config.
+func verifyRateLimitConfig(
+	t *testing.T,
+	config *middleware.RateLimitTypeConfig,
+	expectedEnabled bool,
+	expectedRequests int,
+	expectedWindow int,
+) {
+	t.Helper()
+
+	require.NotNil(t, config)
+	require.NotNil(t, config.Enabled)
+	require.NotNil(t, config.Requests)
+	require.NotNil(t, config.Window)
+
+	assert.Equal(t, expectedEnabled, *config.Enabled)
+	assert.Equal(t, expectedRequests, *config.Requests)
+	assert.Equal(t, expectedWindow, *config.Window)
+}
+
+func TestRateLimitGlobalDefault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("global rate limit has default values", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.RateLimit)
+		verifyRateLimitConfig(t, config.RateLimit.Global, false, 1000, 60)
+	})
+}
+
+func TestRateLimitIPDefault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("IP rate limit has default values", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.RateLimit)
+		verifyRateLimitConfig(t, config.RateLimit.IP, true, 100, 60)
+	})
+}
+
+func TestRateLimitEndpointDefault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("endpoint rate limit has default values", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.RateLimit)
+		verifyRateLimitConfig(t, config.RateLimit.Endpoint, false, 50, 60)
+	})
+}
+
+func TestRateLimitCustomConfiguration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("custom rate limit configuration", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			RateLimit: &middleware.RateLimitConfig{
+				Global: &middleware.RateLimitTypeConfig{
+					Enabled:  &[]bool{true}[0],
+					Requests: &[]int{500}[0],
+					Window:   &[]int{30}[0],
+				},
+				IP: &middleware.RateLimitTypeConfig{
+					Enabled:  &[]bool{false}[0],
+					Requests: &[]int{50}[0],
+					Window:   &[]int{120}[0],
+				},
+				Endpoint: &middleware.RateLimitTypeConfig{
+					Enabled:  &[]bool{true}[0],
+					Requests: &[]int{25}[0],
+					Window:   &[]int{90}[0],
+				},
+			},
+		}
+		config.SetDefault()
+
+		require.NotNil(t, config.RateLimit)
+
+		// verify global settings
+		assert.True(t, *config.RateLimit.Global.Enabled)
+		assert.Equal(t, 500, *config.RateLimit.Global.Requests)
+		assert.Equal(t, 30, *config.RateLimit.Global.Window)
+
+		// verify IP settings
+		assert.False(t, *config.RateLimit.IP.Enabled)
+		assert.Equal(t, 50, *config.RateLimit.IP.Requests)
+		assert.Equal(t, 120, *config.RateLimit.IP.Window)
+
+		// verify endpoint settings
+		assert.True(t, *config.RateLimit.Endpoint.Enabled)
+		assert.Equal(t, 25, *config.RateLimit.Endpoint.Requests)
+		assert.Equal(t, 90, *config.RateLimit.Endpoint.Window)
 	})
 }
 
@@ -751,8 +972,10 @@ func TestCORSHeaders(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create test request with Origin header
@@ -775,8 +998,10 @@ func TestCORSHeaders(t *testing.T) {
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
+		redisClient := setupTestRedis(t)
+
 		mockHandler := &mockAPIHandler{}
-		server, err := New(nil, log, mockHandler)
+		server, err := New(nil, log, mockHandler, redisClient)
 		require.NoError(t, err)
 
 		// create preflight request
@@ -794,6 +1019,49 @@ func TestCORSHeaders(t *testing.T) {
 	})
 }
 
+// createTestServerWithCORS creates a test server with CORS config.
+func createTestServerWithCORS(
+	t *testing.T,
+	config *Config,
+) *Server {
+	t.Helper()
+
+	log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+	require.NoError(t, err)
+
+	redisClient := setupTestRedis(t)
+
+	mockHandler := &mockAPIHandler{}
+	server, err := New(config, log, mockHandler, redisClient)
+	require.NoError(t, err)
+
+	return server
+}
+
+// makeRequestAndVerifyCORS makes a request and verifies CORS.
+func makeRequestAndVerifyCORS(
+	t *testing.T,
+	server *Server,
+	origin string,
+	expectedOrigin string,
+) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/status", nil)
+	req.Header.Set("Origin", origin)
+
+	recorder := httptest.NewRecorder()
+
+	server.httpServer.Handler.ServeHTTP(recorder, req)
+
+	if expectedOrigin != "" {
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Equal(t, expectedOrigin, recorder.Header().Get("Access-Control-Allow-Origin"))
+	} else {
+		assert.Empty(t, recorder.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
 func TestCORSCustomOrigins(t *testing.T) {
 	t.Parallel()
 
@@ -808,25 +1076,8 @@ func TestCORSCustomOrigins(t *testing.T) {
 			},
 		}
 
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
-		require.NoError(t, err)
-
-		// create test request with allowed origin
-		req := httptest.NewRequest(http.MethodGet, "/status", nil)
-		req.Header.Set("Origin", "https://example.com")
-
-		recorder := httptest.NewRecorder()
-
-		// serve the request
-		server.httpServer.Handler.ServeHTTP(recorder, req)
-
-		// verify response and CORS header
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, "https://example.com", recorder.Header().Get("Access-Control-Allow-Origin"))
+		server := createTestServerWithCORS(t, config)
+		makeRequestAndVerifyCORS(t, server, "https://example.com", "https://example.com")
 	})
 
 	t.Run("disallowed origin is rejected", func(t *testing.T) {
@@ -840,23 +1091,7 @@ func TestCORSCustomOrigins(t *testing.T) {
 			},
 		}
 
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		mockHandler := &mockAPIHandler{}
-		server, err := New(config, log, mockHandler)
-		require.NoError(t, err)
-
-		// create test request with disallowed origin
-		req := httptest.NewRequest(http.MethodGet, "/status", nil)
-		req.Header.Set("Origin", "https://evil.com")
-
-		recorder := httptest.NewRecorder()
-
-		// serve the request
-		server.httpServer.Handler.ServeHTTP(recorder, req)
-
-		// verify CORS header is not set for disallowed origin
-		assert.Empty(t, recorder.Header().Get("Access-Control-Allow-Origin"))
+		server := createTestServerWithCORS(t, config)
+		makeRequestAndVerifyCORS(t, server, "https://evil.com", "")
 	})
 }
