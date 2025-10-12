@@ -58,8 +58,23 @@ type Config struct {
 	// MaxRequestSize is maximum request size in bytes.
 	MaxRequestSize *int64 `json:"max_request_size"`
 
+	// Compression is compression configuration of server.
+	Compression *CompressionConfig `json:"compression"`
+
 	// CORS is CORS of server.
 	CORS *CORSConfig `json:"cors"`
+}
+
+// CompressionConfig represents configuration for compression.
+type CompressionConfig struct {
+	// Level is compression level (1-9).
+	Level *int `json:"level"`
+
+	// Format is compression format (gzip, deflate, br).
+	Format *string `json:"format"`
+
+	// Enabled is whether compression is enabled.
+	Enabled *bool `json:"enabled"`
 }
 
 // CORSConfig represents configuration for CORS.
@@ -77,6 +92,7 @@ type CORSConfig struct {
 // SetDefault sets default values.
 func (c *Config) SetDefault() {
 	c.setServerDefault()
+	c.setCompressionDefault()
 	c.setCORSDefault()
 }
 
@@ -108,6 +124,25 @@ func (c *Config) setServerDefault() {
 
 	if c.MaxRequestSize == nil {
 		c.MaxRequestSize = &[]int64{10485760}[0] // 10MB
+	}
+}
+
+// setCompressionDefault sets default values for compression on server.
+func (c *Config) setCompressionDefault() {
+	if c.Compression == nil {
+		c.Compression = &CompressionConfig{}
+	}
+
+	if c.Compression.Level == nil {
+		c.Compression.Level = &[]int{6}[0]
+	}
+
+	if c.Compression.Format == nil {
+		c.Compression.Format = &[]string{"gzip"}[0]
+	}
+
+	if c.Compression.Enabled == nil {
+		c.Compression.Enabled = &[]bool{true}[0]
 	}
 }
 
@@ -181,6 +216,11 @@ func (s *Server) setupBasicMiddlewares(router *chi.Mux, config *Config) {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.SecurityHeaders())
 	router.Use(middleware.RequestSize(*config.MaxRequestSize))
+
+	if *config.Compression.Enabled {
+		router.Use(middleware.Compress(*config.Compression.Level, *config.Compression.Format))
+	}
+
 	router.Use(middleware.LogRequest(s.logger))
 	router.Use(middleware.Timeout(time.Duration(*config.ReadTimeout) * time.Second))
 }
@@ -199,7 +239,7 @@ func (s *Server) setupCORS(router *chi.Mux, config *Config) {
 	}))
 }
 
-// setupAPIHandler sets up the API handler.
+// setupAPIHandler sets up the API handler with JWT authentication.
 func (s *Server) setupAPIHandler(
 	apiHandler api.ServerInterface,
 	router *chi.Mux,

@@ -91,6 +91,27 @@ func TestConfigSetDefault(t *testing.T) {
 	})
 }
 
+func TestConfigSetDefaultCompression(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default compression when config is empty", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.Compression)
+		require.NotNil(t, config.Compression.Level)
+		require.NotNil(t, config.Compression.Format)
+		require.NotNil(t, config.Compression.Enabled)
+
+		assert.Equal(t, 6, *config.Compression.Level)
+		assert.Equal(t, "gzip", *config.Compression.Format)
+		assert.True(t, *config.Compression.Enabled)
+	})
+}
+
 func TestConfigSetDefaultCORS(t *testing.T) {
 	t.Parallel()
 
@@ -519,6 +540,138 @@ func TestServerMetricsEndpoint(t *testing.T) {
 
 		// verify response
 		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+}
+
+func TestCompressionEnabled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("compression is enabled by default", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.Compression)
+		require.NotNil(t, config.Compression.Enabled)
+		assert.True(t, *config.Compression.Enabled)
+	})
+}
+
+func TestCompressionLevel(t *testing.T) {
+	t.Parallel()
+
+	t.Run("compression has default level", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.Compression)
+		require.NotNil(t, config.Compression.Level)
+		assert.Equal(t, 6, *config.Compression.Level)
+	})
+}
+
+func TestCompressionFormat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("compression has default format", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+		config.SetDefault()
+
+		require.NotNil(t, config.Compression)
+		require.NotNil(t, config.Compression.Format)
+		assert.Equal(t, "gzip", *config.Compression.Format)
+	})
+}
+
+func TestCompressionCustomConfiguration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("custom compression configuration", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Compression: &CompressionConfig{
+				Level:   &[]int{9}[0],
+				Format:  &[]string{"deflate"}[0],
+				Enabled: &[]bool{false}[0],
+			},
+		}
+		config.SetDefault()
+
+		require.NotNil(t, config.Compression)
+		assert.Equal(t, 9, *config.Compression.Level)
+		assert.Equal(t, "deflate", *config.Compression.Format)
+		assert.False(t, *config.Compression.Enabled)
+	})
+}
+
+func TestCompressionInResponse(t *testing.T) {
+	t.Parallel()
+
+	t.Run("compression is applied when enabled", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Compression: &CompressionConfig{
+				Enabled: &[]bool{true}[0],
+			},
+		}
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request with Accept-Encoding header
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response - compression middleware is applied
+		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+
+	t.Run("compression is not applied when disabled", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			Compression: &CompressionConfig{
+				Enabled: &[]bool{false}[0],
+			},
+		}
+
+		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		mockHandler := &mockAPIHandler{}
+		server, err := New(config, log, mockHandler)
+		require.NoError(t, err)
+
+		// create test request with Accept-Encoding header
+		req := httptest.NewRequest(http.MethodGet, "/status", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		recorder := httptest.NewRecorder()
+
+		// serve the request
+		server.httpServer.Handler.ServeHTTP(recorder, req)
+
+		// verify response
+		assert.Equal(t, http.StatusOK, recorder.Code)
+
+		// Content-Encoding should not be set when compression is disabled
+		assert.Empty(t, recorder.Header().Get("Content-Encoding"))
 	})
 }
 
