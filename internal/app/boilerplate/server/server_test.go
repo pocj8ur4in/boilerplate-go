@@ -279,12 +279,9 @@ func TestNew(t *testing.T) {
 	})
 }
 
+//nolint:paralleltest // sequential execution required to avoid prometheus registry conflicts
 func TestSetupRouter(t *testing.T) {
-	t.Parallel()
-
 	t.Run("setup router successfully", func(t *testing.T) {
-		t.Parallel()
-
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
@@ -301,18 +298,14 @@ func TestSetupRouter(t *testing.T) {
 		server, err := New(cfg, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(server.config, log, redisClient)
-
-		require.NotNil(t, router)
+		require.NotNil(t, server.httpServer)
+		require.NotNil(t, server.httpServer.Handler)
 	})
 }
 
+//nolint:paralleltest // sequential execution required to avoid prometheus registry conflicts
 func TestSetupAPIHandler(t *testing.T) {
-	t.Parallel()
-
 	t.Run("setup API handler successfully", func(t *testing.T) {
-		t.Parallel()
-
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
@@ -323,10 +316,8 @@ func TestSetupAPIHandler(t *testing.T) {
 		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(server.config, log, redisClient)
-		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
-
-		require.NotNil(t, handler)
+		require.NotNil(t, server.httpServer)
+		require.NotNil(t, server.httpServer.Handler)
 	})
 }
 
@@ -349,12 +340,9 @@ func verifyHTTPServer(
 	assert.NotNil(t, httpServer.Handler)
 }
 
+//nolint:paralleltest // sequential execution required to avoid prometheus registry conflicts
 func TestCreateHTTPServer(t *testing.T) {
-	t.Parallel()
-
 	t.Run("create HTTP server with default config", func(t *testing.T) {
-		t.Parallel()
-
 		config := &Config{}
 		config.SetDefault()
 
@@ -368,17 +356,11 @@ func TestCreateHTTPServer(t *testing.T) {
 		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(config, log, redisClient)
-		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
-		httpServer := server.createHTTPServer(config, handler)
-
-		verifyHTTPServer(t, httpServer, "localhost:8080",
+		verifyHTTPServer(t, server.httpServer, "localhost:8080",
 			10*time.Second, 10*time.Second, 10*time.Second)
 	})
 
 	t.Run("create HTTP server with custom config", func(t *testing.T) {
-		t.Parallel()
-
 		config := &Config{
 			Host:         &[]string{"0.0.0.0"}[0],
 			Port:         &[]int{9090}[0],
@@ -398,11 +380,7 @@ func TestCreateHTTPServer(t *testing.T) {
 		server, err := New(config, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(config, log, redisClient)
-		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
-		httpServer := server.createHTTPServer(config, handler)
-
-		verifyHTTPServer(t, httpServer, "0.0.0.0:9090",
+		verifyHTTPServer(t, server.httpServer, "0.0.0.0:9090",
 			20*time.Second, 30*time.Second, 40*time.Second)
 	})
 }
@@ -516,12 +494,9 @@ func TestServerHTTPMethods(t *testing.T) {
 	})
 }
 
+//nolint:paralleltest // sequential execution required to avoid prometheus registry conflicts
 func TestServerHandlerIntegration(t *testing.T) {
-	t.Parallel()
-
 	t.Run("verify handler is properly integrated", func(t *testing.T) {
-		t.Parallel()
-
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
@@ -546,8 +521,6 @@ func TestServerHandlerIntegration(t *testing.T) {
 	})
 
 	t.Run("verify router is properly set up", func(t *testing.T) {
-		t.Parallel()
-
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
 		require.NoError(t, err)
 
@@ -558,12 +531,29 @@ func TestServerHandlerIntegration(t *testing.T) {
 		server, err := New(nil, log, mockHandler, jwtService, redisClient)
 		require.NoError(t, err)
 
-		router := server.setupRouter(server.config, log, redisClient)
-		require.NotNil(t, router)
+		// verify server httpServer handler is set
+		require.NotNil(t, server.httpServer)
+		require.NotNil(t, server.httpServer.Handler)
 
-		// verify router can be used to create handler
-		handler := server.setupAPIHandler(mockHandler, router, jwtService, log)
-		require.NotNil(t, handler)
+		// test router works with different endpoints
+		testCases := []struct {
+			method string
+			path   string
+		}{
+			{http.MethodGet, "/status"},
+			{http.MethodGet, "/health"},
+			{http.MethodGet, "/metrics"},
+		}
+
+		for _, tc := range testCases {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			recorder := httptest.NewRecorder()
+
+			server.httpServer.Handler.ServeHTTP(recorder, req)
+
+			// verify router handled the request
+			assert.NotEqual(t, http.StatusNotFound, recorder.Code)
+		}
 	})
 }
 

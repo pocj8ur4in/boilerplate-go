@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/fx"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
@@ -35,6 +37,9 @@ type Server struct {
 
 	// httpServer provides HTTP server.
 	httpServer *http.Server
+
+	// registry provides Prometheus registry for metrics.
+	registry *prometheus.Registry
 }
 
 // Config represents configuration for server.
@@ -68,6 +73,9 @@ type Config struct {
 
 	// RateLimit is rate limit of server.
 	RateLimit *middleware.RateLimitConfig `json:"rate_limit"`
+
+	// Metrics is metrics configuration of server.
+	Metrics *middleware.MetricsConfig `json:"metrics"`
 }
 
 // CompressionConfig represents configuration for compression.
@@ -100,6 +108,7 @@ func (c *Config) SetDefault() {
 	c.setCompressionDefault()
 	c.setCORSDefault()
 	c.setRateLimitDefault()
+	c.setMetricsDefault()
 }
 
 // setServerDefault sets default values for server.
@@ -239,6 +248,27 @@ func (c *Config) setEndpointRateLimitDefault() {
 	}
 }
 
+// setMetricsDefault sets default values for metrics.
+func (c *Config) setMetricsDefault() {
+	if c.Metrics == nil {
+		c.Metrics = &middleware.MetricsConfig{}
+	}
+
+	if c.Metrics.Enabled == nil {
+		c.Metrics.Enabled = &[]bool{true}[0]
+	}
+
+	if c.Metrics.Path == nil {
+		c.Metrics.Path = &[]string{"/metrics"}[0]
+	}
+
+	if c.Metrics.ExcludePaths == nil {
+		c.Metrics.ExcludePaths = []string{"/health", "/status"}
+	}
+
+	c.Metrics.SetDefault()
+}
+
 // NewModule provides module for server.
 func NewModule() fx.Option {
 	return fx.Module("server",
@@ -263,8 +293,9 @@ func New(
 
 	// create server
 	server := &Server{
-		config: config,
-		logger: logger,
+		config:   config,
+		logger:   logger,
+		registry: prometheus.NewRegistry(),
 	}
 
 	// setup router and handlers
@@ -282,6 +313,7 @@ func (s *Server) setupRouter(config *Config, logger *logger.Logger, redis *redis
 	s.setupBasicMiddlewares(router, config)
 	s.setupRateLimitMiddlewares(router, config, redis, logger)
 	s.setupCORS(router, config)
+	s.setupMetricsEndpoint(router, config)
 
 	return router
 }
@@ -296,6 +328,10 @@ func (s *Server) setupBasicMiddlewares(router *chi.Mux, config *Config) {
 
 	if *config.Compression.Enabled {
 		router.Use(middleware.Compress(*config.Compression.Level, *config.Compression.Format))
+	}
+
+	if *config.Metrics.Enabled {
+		router.Use(middleware.Metrics(config.Metrics, s.registry))
 	}
 
 	router.Use(middleware.LogRequest(s.logger))
@@ -344,6 +380,16 @@ func (s *Server) setupCORS(router *chi.Mux, config *Config) {
 		ExposedHeaders:   []string{"Link"},
 		MaxAge:           corsMaxAge,
 	}))
+}
+
+// setupMetricsEndpoint sets up the metrics endpoint with isolated registry.
+func (s *Server) setupMetricsEndpoint(router *chi.Mux, config *Config) {
+	if *config.Metrics.Enabled {
+		router.Handle(*config.Metrics.Path, promhttp.HandlerFor(
+			s.registry,
+			promhttp.HandlerOpts{},
+		))
+	}
 }
 
 // setupAPIHandler sets up the API handler with JWT authentication.
