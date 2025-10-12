@@ -154,7 +154,7 @@ func TestSetupRouter(t *testing.T) {
 		server, err := New(nil, log, mockHandler)
 		require.NoError(t, err)
 
-		router := server.setupRouter()
+		router := server.setupRouter(server.config)
 
 		require.NotNil(t, router)
 	})
@@ -173,7 +173,7 @@ func TestSetupAPIHandler(t *testing.T) {
 		server, err := New(nil, log, mockHandler)
 		require.NoError(t, err)
 
-		router := server.setupRouter()
+		router := server.setupRouter(server.config)
 		handler := server.setupAPIHandler(mockHandler, router)
 
 		require.NotNil(t, handler)
@@ -196,7 +196,7 @@ func TestCreateHTTPServer(t *testing.T) {
 		server, err := New(config, log, mockHandler)
 		require.NoError(t, err)
 
-		router := server.setupRouter()
+		router := server.setupRouter(config)
 		handler := server.setupAPIHandler(mockHandler, router)
 		httpServer := server.createHTTPServer(config, handler)
 
@@ -227,7 +227,7 @@ func TestCreateHTTPServer(t *testing.T) {
 		server, err := New(config, log, mockHandler)
 		require.NoError(t, err)
 
-		router := server.setupRouter()
+		router := server.setupRouter(config)
 		handler := server.setupAPIHandler(mockHandler, router)
 		httpServer := server.createHTTPServer(config, handler)
 
@@ -376,7 +376,7 @@ func TestServerHandlerIntegration(t *testing.T) {
 		server, err := New(nil, log, mockHandler)
 		require.NoError(t, err)
 
-		router := server.setupRouter()
+		router := server.setupRouter(server.config)
 		require.NotNil(t, router)
 
 		// verify router can be used to create handler

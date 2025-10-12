@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
 
+	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
 	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
@@ -120,7 +121,7 @@ func New(
 	}
 
 	// setup router and handlers
-	router := server.setupRouter()
+	router := server.setupRouter(config)
 	httpHandler := server.setupAPIHandler(apiHandler, router)
 	server.httpServer = server.createHTTPServer(config, httpHandler)
 
@@ -128,10 +129,23 @@ func New(
 }
 
 // setupRouter sets up the router.
-func (s *Server) setupRouter() *chi.Mux {
+func (s *Server) setupRouter(config *Config) *chi.Mux {
 	router := chi.NewRouter()
 
+	s.setupBasicMiddlewares(router, config)
+
 	return router
+}
+
+// setupBasicMiddlewares sets up basic middlewares.
+func (s *Server) setupBasicMiddlewares(router *chi.Mux, config *Config) {
+	router.Use(middleware.RequestID)
+	router.Use(middleware.RealIP)
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.RequestSize(*config.MaxRequestSize))
+	router.Use(middleware.LogRequest(s.logger))
+	router.Use(middleware.Timeout(time.Duration(*config.ReadTimeout) * time.Second))
 }
 
 // setupAPIHandler sets up the API handler.
