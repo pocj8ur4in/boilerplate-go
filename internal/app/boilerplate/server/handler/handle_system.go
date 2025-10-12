@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 )
 
@@ -50,6 +52,6 @@ func (h *Handler) HealthCheck(writer http.ResponseWriter, r *http.Request) {
 }
 
 // HandleMetrics handles GET /metrics endpoint.
-func (h *Handler) HandleMetrics(writer http.ResponseWriter, _ *http.Request) {
-	h.sendResponse(writer, http.StatusNotImplemented, map[string]interface{}{})
+func (h *Handler) HandleMetrics(writer http.ResponseWriter, request *http.Request) {
+	promhttp.Handler().ServeHTTP(writer, request)
 }

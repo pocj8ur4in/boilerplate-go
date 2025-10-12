@@ -35,6 +35,23 @@
       "allowed_origins": ["*"],
       "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       "allowed_headers": ["Content-Type", "Authorization", "X-Request-ID"]
+    },
+    "rate_limit": {
+      "global": {
+        "enabled": true,
+        "requests": 10000,
+        "window": 60
+      },
+      "ip": {
+        "enabled": true,
+        "requests": 60,
+        "window": 60
+      },
+      "endpoint": {
+        "enabled": true,
+        "requests": 30,
+        "window": 60
+      }
     }
   },
   "jwt": {

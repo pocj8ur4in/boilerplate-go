@@ -101,7 +101,7 @@ func TestHealthCheck(t *testing.T) {
 func TestHandleMetrics(t *testing.T) {
 	t.Parallel()
 
-	t.Run("metrics handler returns not implemented", func(t *testing.T) {
+	t.Run("metrics handler returns prometheus metrics", func(t *testing.T) {
 		t.Parallel()
 
 		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
@@ -119,8 +119,9 @@ func TestHandleMetrics(t *testing.T) {
 		handler.HandleMetrics(recorder, req)
 
 		// verify response
-		assert.Equal(t, http.StatusNotImplemented, recorder.Code)
-		assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Contains(t, recorder.Header().Get("Content-Type"), "text/plain")
+		assert.NotEmpty(t, recorder.Body.String())
 	})
 
 	t.Run("metrics handler with query parameters", func(t *testing.T) {
@@ -138,7 +139,8 @@ func TestHandleMetrics(t *testing.T) {
 
 		handler.HandleMetrics(recorder, req)
 
-		assert.Equal(t, http.StatusNotImplemented, recorder.Code)
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Contains(t, recorder.Header().Get("Content-Type"), "text/plain")
 	})
 }
 
@@ -169,14 +171,14 @@ func TestSystemHandlersIntegration(t *testing.T) {
 
 				endpoint.handler(recorder, req)
 
-				// StatusCheck and HealthCheck return OK, others return NotImplemented
-				expectedStatus := http.StatusNotImplemented
-				if endpoint.name == "status" || endpoint.name == "health" {
-					expectedStatus = http.StatusOK
-				}
+				assert.Equal(t, http.StatusOK, recorder.Code)
 
-				assert.Equal(t, expectedStatus, recorder.Code)
-				assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+				// Check content type based on endpoint
+				if endpoint.name == "metrics" {
+					assert.Contains(t, recorder.Header().Get("Content-Type"), "text/plain")
+				} else {
+					assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+				}
 			})
 		}
 	})
