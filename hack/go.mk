@@ -12,6 +12,7 @@ help-go:
 	@echo "- $(WHITE)make go coverage$(RESET)                         $(CYAN)Test coverage for go project$(RESET)"
 	@echo "- $(WHITE)make go fmt$(RESET)                              $(CYAN)Format go project$(RESET)"
 	@echo "- $(WHITE)make go lint$(RESET)                             $(CYAN)Lint go project$(RESET)"
+	@echo "- $(WHITE)make go sec$(RESET)                              $(CYAN)Security scan for go project$(RESET)"
 
 .PHONY: go
 go:
@@ -47,6 +48,8 @@ go:
 	elif [ "$(TARGET)" = "lint" ]; then \
 		echo "$(BLUE)Linting go project...$(RESET)"; \
 		CONFIG_PATH=$(CONFIG_PATH) CGO_ENABLED=1 golangci-lint run $(CURDIR)/... -c $(CURDIR)/golangci.yaml; \
+	elif [ "$(TARGET)" = "sec" ]; then \
+		gosec -fmt text ./...; \
 	else \
 		echo "$(RED)unknown target command: $(TARGET)$(RESET)"; \
 		exit 1; \

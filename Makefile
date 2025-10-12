@@ -96,6 +96,15 @@ prepare:
 		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
 	fi
 
+	@echo "$(BLUE)Checking gosec...$(RESET)"
+	@if ! command -v gosec > /dev/null; then \
+		echo "$(YELLOW)gosec is not installed. installing gosec...$(RESET)"; \
+		go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4; \
+		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
+	else \
+		echo "$(BLUE)gosec is already installed: $(shell gosec --version 2>&1 | head -n 1)$(RESET)"; \
+	fi
+
 	@echo "$(BLUE)Checking docker...$(RESET)"
 	@if ! command -v docker > /dev/null; then \
 		echo "$(YELLOW)docker is not installed. installing docker...$(RESET)"; \
@@ -163,4 +172,5 @@ prepare:
 
 	@echo "$(BLUE)Preparing go project...$(RESET)"
 	go mod download;
+	go mod tidy;
 
