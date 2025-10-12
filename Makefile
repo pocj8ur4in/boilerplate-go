@@ -1,6 +1,7 @@
 # Include
 include hack/go.mk
 include hack/sqlc.mk
+include hack/openapi.mk
 include hack/docker.mk
 
 # Colors
@@ -43,7 +44,7 @@ help:
 	@echo
 	@$(MAKE) -f $(HACK_DIR)/sqlc.mk help-sqlc CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" CONFIG_EXAMPLE_FILE="$(CONFIG_EXAMPLE_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
 	@echo
-	@$(MAKE) -f $(HACK_DIR)/oapi.mk help-oapi CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" CONFIG_EXAMPLE_FILE="$(CONFIG_EXAMPLE_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
+	@$(MAKE) -f $(HACK_DIR)/openapi.mk help-openapi CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" CONFIG_EXAMPLE_FILE="$(CONFIG_EXAMPLE_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
 	@echo
 	@$(MAKE) -f $(HACK_DIR)/docker.mk help-docker CURDIR="$(CURDIR)" BINARY_NAME="$(BINARY_NAME)" CONFIG_FILE="$(CONFIG_FILE)" CONFIG_EXAMPLE_FILE="$(CONFIG_EXAMPLE_FILE)" BUILD_DIR="$(BUILD_DIR)" HACK_DIR="$(HACK_DIR)" CMD_DIR="$(CMD_DIR)" WHITE="$(WHITE)" BLACK="$(BLACK)" RED="$(RED)" CYAN="$(CYAN)" YELLOW="$(YELLOW)" BLUE="$(BLUE)" MAGENTA="$(MAGENTA)" CYAN="$(CYAN)" BLUE="$(BLUE)" GRAY="$(GRAY)" RESET="$(RESET)"
 	@echo
@@ -177,6 +178,39 @@ prepare:
 		echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc; \
 	else \
 		echo "$(BLUE)oapi-codegen is already installed: $(shell oapi-codegen --version)$(RESET)"; \
+	fi
+
+	@echo "$(BLUE)Checking k6...$(RESET)"
+	@if ! command -v k6 > /dev/null; then \
+		echo "$(YELLOW)k6 is not installed. installing k6...$(RESET)"; \
+		if command -v brew > /dev/null; then \
+			brew install k6; \
+		elif command -v apt-get > /dev/null; then \
+			sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69; \
+			echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list; \
+			sudo apt-get update && sudo apt-get install -y k6; \
+		elif command -v yum > /dev/null; then \
+			sudo yum install -y https://dl.k6.io/rpm/repo.rpm; \
+			sudo yum install -y k6; \
+		elif command -v dnf > /dev/null; then \
+			sudo dnf install -y https://dl.k6.io/rpm/repo.rpm; \
+			sudo dnf install -y k6; \
+		else \
+			echo "$(YELLOW)trying to install k6 from official binary...$(RESET)"; \
+			mkdir -p /tmp/k6 && cd /tmp/k6; \
+			curl -L -o k6-v0.47.0-linux-amd64.tar.gz https://github.com/grafana/k6/releases/download/v0.47.0/k6-v0.47.0-linux-amd64.tar.gz; \
+			if [ -f k6-v0.47.0-linux-amd64.tar.gz ]; then \
+				tar -xzf k6-v0.47.0-linux-amd64.tar.gz; \
+				sudo mv k6-v0.47.0-linux-amd64/k6 /usr/local/bin/; \
+				sudo chmod +x /usr/local/bin/k6; \
+				cd $(CURDIR) && rm -rf /tmp/k6; \
+			else \
+				echo "$(RED)failed to download k6. please install manually$(RESET)"; \
+				exit 1; \
+			fi; \
+		fi; \
+	else \
+		echo "$(BLUE)k6 is already installed: $(shell k6 version)$(RESET)"; \
 	fi
 
 	@echo "$(BLUE)Preparing go project...$(RESET)"

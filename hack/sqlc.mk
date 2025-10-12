@@ -6,7 +6,6 @@ help-sqlc:
 	@echo "$(WHITE)$(CYAN)[sqlc target]$(RESET)"
 	@echo "- $(WHITE)make sqlc generate$(RESET)                       $(CYAN)Generate Go code from SQL queries$(RESET)"
 
-# sqlc Target
 .PHONY: sqlc
 sqlc:
 	$(eval TARGET := $(filter-out $@,$(MAKECMDGOALS)))
