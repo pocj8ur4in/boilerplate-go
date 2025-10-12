@@ -19,6 +19,7 @@ import (
 var (
 	// ErrMaxConnsExceedsLimit returned when max_conns exceeds int32 limit.
 	ErrMaxConnsExceedsLimit = errors.New("max_conns exceeds int32 limit")
+
 	// ErrMaxIdleExceedsLimit returned when max_idle exceeds int32 limit.
 	ErrMaxIdleExceedsLimit = errors.New("max_idle exceeds int32 limit")
 )

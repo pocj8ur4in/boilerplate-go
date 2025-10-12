@@ -12,6 +12,7 @@ import (
 	"go.uber.org/fx"
 
 	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
+	jwtPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	redisPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -63,13 +64,18 @@ func TestNew(t *testing.T) {
 				"db_name": "boilerplate",
 				"ssl_mode": false
 			},
+			"jwt": {
+				"issuer": "boilerplate",
+				"audience": "boilerplate_audience",
+				"secret_key": "test_secret_key"
+			},
+			"logger": {
+				"level": "info"
+			},
 			"redis": {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
-			},
-			"logger": {
-				"level": "info"
 			}
 		}`)
 
@@ -91,13 +97,18 @@ func TestNewWithStart(t *testing.T) {
 				"db_name": "boilerplate",
 				"ssl_mode": false
 			},
+			"jwt": {
+				"issuer": "boilerplate",
+				"audience": "boilerplate_audience",
+				"secret_key": "test_secret_key"
+			},
+			"logger": {
+				"level": "info"
+			},
 			"redis": {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
-			},
-			"logger": {
-				"level": "info"
 			}
 		}`)
 
@@ -120,13 +131,18 @@ func TestRegisterHooks(t *testing.T) {
 				"db_name": "boilerplate",
 				"ssl_mode": false
 			},
+			"jwt": {
+				"issuer": "boilerplate",
+				"audience": "boilerplate_audience",
+				"secret_key": "test_secret_key"
+			},
+			"logger": {
+				"level": "info"
+			},
 			"redis": {
 				"addrs": ["localhost:36379"],
 				"password": "",
 				"db": 0
-			},
-			"logger": {
-				"level": "info"
 			}
 		}`)
 
@@ -157,15 +173,17 @@ func TestRegisterHooksDirectly(t *testing.T) {
 			},
 		}
 
-		level := "info"
-		logger, err := loggerPkg.New(&loggerPkg.Config{Level: &level})
+		log, err := loggerPkg.New(&loggerPkg.Config{Level: &[]string{"info"}[0]})
+		require.NoError(t, err)
+
+		jwt, err := jwtPkg.New(&jwtPkg.Config{SecretKey: &[]string{"secret_key"}[0]})
 		require.NoError(t, err)
 
 		// create minimal structures (won't actually call Close on them)
 		dbConn := &databasePkg.DB{DB: &sql.DB{}}
 		redisConn := &redisPkg.Redis{}
 
-		registerHooks(lifecycle, dbConn, logger, redisConn)
+		registerHooks(lifecycle, dbConn, log, jwt, redisConn)
 
 		require.True(t, hookRegistered, "lifecycle hook should be registered")
 		require.True(t, onStartCalled, "OnStart should be called successfully")
@@ -213,16 +231,13 @@ func TestNewWithCustomConfig(t *testing.T) {
 				"db_name": "boilerplate",
 				"ssl_mode": false
 			},
+			"jwt": {
+				"issuer": "custom_issuer",
+				"audience": "custom_audience",
+				"secret_key": "custom_secret_key"
+			},
 			"logger": {
 				"level": "debug"
-			},
-			"database": {
-				"host": "localhost",
-				"port": 35432,
-				"user": "boilerplate_user",
-				"password": "boilerplate_password",
-				"db_name": "boilerplate",
-				"ssl_mode": false
 			},
 			"redis": {
 				"addrs": ["localhost:36379"],

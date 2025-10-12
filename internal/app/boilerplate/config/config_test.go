@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -381,5 +382,79 @@ func TestConfigSetDefaultRedis(t *testing.T) {
 		assert.Equal(t, []string{"redis1:6379"}, config.Redis.Addrs)
 		assert.Equal(t, "test_password", *config.Redis.Password)
 		assert.Equal(t, 1, *config.Redis.DB)
+	})
+}
+
+func TestProvideJWTConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return JWT config from config", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			JWT: &jwt.Config{
+				Issuer:    &[]string{"test_issuer"}[0],
+				Audience:  &[]string{"test_audience"}[0],
+				SecretKey: &[]string{"test_secret_key"}[0],
+			},
+		}
+
+		jwtConfig := ProvideJWTConfig(config)
+
+		require.NotNil(t, jwtConfig)
+		require.NotNil(t, jwtConfig.Issuer)
+		require.NotNil(t, jwtConfig.Audience)
+		require.NotNil(t, jwtConfig.SecretKey)
+		assert.Equal(t, "test_issuer", *jwtConfig.Issuer)
+		assert.Equal(t, "test_audience", *jwtConfig.Audience)
+		assert.Equal(t, "test_secret_key", *jwtConfig.SecretKey)
+	})
+
+	t.Run("return nil when config.JWT is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		jwtConfig := ProvideJWTConfig(config)
+
+		assert.Nil(t, jwtConfig)
+	})
+}
+
+func TestConfigSetDefaultJWT(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set default JWT when config.JWT is nil", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.JWT)
+		require.NotNil(t, config.JWT.Issuer)
+		assert.Equal(t, "boilerplate", *config.JWT.Issuer)
+	})
+
+	t.Run("keep existing JWT when config.JWT is already set", func(t *testing.T) {
+		t.Parallel()
+
+		config := &Config{
+			JWT: &jwt.Config{
+				Issuer:    &[]string{"test_issuer"}[0],
+				Audience:  &[]string{"test_audience"}[0],
+				SecretKey: &[]string{"test_secret_key"}[0],
+			},
+		}
+
+		config.SetDefault()
+
+		require.NotNil(t, config.JWT)
+		require.NotNil(t, config.JWT.Issuer)
+		require.NotNil(t, config.JWT.Audience)
+		require.NotNil(t, config.JWT.SecretKey)
+		assert.Equal(t, "test_issuer", *config.JWT.Issuer)
+		assert.Equal(t, "test_audience", *config.JWT.Audience)
+		assert.Equal(t, "test_secret_key", *config.JWT.SecretKey)
 	})
 }

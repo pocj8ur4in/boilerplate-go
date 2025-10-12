@@ -10,6 +10,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -21,6 +22,7 @@ func NewModule() fx.Option {
 			LoadFromFile,
 			ProvideLoggerConfig,
 			ProvideDatabaseConfig,
+			ProvideJWTConfig,
 			ProvideRedisConfig,
 		),
 	)
@@ -33,6 +35,9 @@ type Config struct {
 
 	// Database provides database configuration.
 	Database *database.Config `json:"database"`
+
+	// JWT provides JWT configuration.
+	JWT *jwt.Config `json:"jwt"`
 
 	// Redis provides redis configuration.
 	Redis *redis.Config `json:"redis"`
@@ -53,6 +58,13 @@ func (c *Config) SetDefault() {
 	}
 
 	c.Database.SetDefault()
+
+	// set jwt
+	if c.JWT == nil {
+		c.JWT = &jwt.Config{}
+	}
+
+	c.JWT.SetDefault()
 
 	// set redis
 	if c.Redis == nil {
@@ -120,6 +132,11 @@ func ProvideLoggerConfig(config *Config) *logger.Config {
 // ProvideDatabaseConfig provides database configuration.
 func ProvideDatabaseConfig(config *Config) *database.Config {
 	return config.Database
+}
+
+// ProvideJWTConfig provides JWT configuration.
+func ProvideJWTConfig(config *Config) *jwt.Config {
+	return config.JWT
 }
 
 // ProvideRedisConfig provides redis configuration.

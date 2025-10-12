@@ -9,6 +9,7 @@ import (
 
 	configPkg "github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/config"
 	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
+	jwtPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	redisPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -20,6 +21,7 @@ func New() *fx.App {
 		configPkg.NewModule(),
 		loggerPkg.NewModule(),
 		databasePkg.NewModule(),
+		jwtPkg.NewModule(),
 		redisPkg.NewModule(),
 
 		// lifecycle hooks
@@ -32,6 +34,7 @@ func registerHooks(
 	lifecycle fx.Lifecycle,
 	dbConn *databasePkg.DB,
 	log *loggerPkg.Logger,
+	_ *jwtPkg.JWT,
 	redisConn *redisPkg.Redis,
 ) {
 	lifecycle.Append(fx.Hook{
