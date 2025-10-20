@@ -21,10 +21,16 @@ type Config struct {
 	Level *string `json:"level"`
 }
 
+const (
+	// defaultLevel is default level of logger.
+	defaultLevel = "info"
+)
+
 // SetDefault sets default values.
 func (c *Config) SetDefault() {
 	if c.Level == nil {
-		c.Level = &[]string{"info"}[0]
+		level := defaultLevel
+		c.Level = &level
 	}
 }
 

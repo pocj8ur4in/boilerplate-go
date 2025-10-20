@@ -7,24 +7,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConfigSetDefault(t *testing.T) {
+const (
+	// testLevel is the test level of logger.
+	testLevel = "debug"
+)
+
+func TestConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("set default value when config.Level is nil", func(t *testing.T) {
+	t.Run("set default values on logger config", func(t *testing.T) {
 		t.Parallel()
 
 		config := &Config{}
-
 		config.SetDefault()
 
 		require.NotNil(t, config.Level)
-		assert.Equal(t, "info", *config.Level)
+		assert.Equal(t, defaultLevel, *config.Level)
 	})
 
-	t.Run("keep existing value when config.Level is already set", func(t *testing.T) {
+	t.Run("preserve existing values on logger config", func(t *testing.T) {
 		t.Parallel()
 
-		level := "debug"
+		level := testLevel
+
 		config := &Config{
 			Level: &level,
 		}
@@ -32,35 +37,49 @@ func TestConfigSetDefault(t *testing.T) {
 		config.SetDefault()
 
 		require.NotNil(t, config.Level)
-		assert.Equal(t, "debug", *config.Level)
+		assert.Equal(t, testLevel, *config.Level)
 	})
 }
 
-func TestNewIsSuccess(t *testing.T) {
+func TestNew(t *testing.T) {
 	t.Parallel()
 
-	t.Run("create logger", func(t *testing.T) {
+	t.Run("create logger with valid config", func(t *testing.T) {
 		t.Parallel()
 
-		level := "info"
+		level := testLevel
+
 		config := &Config{
 			Level: &level,
 		}
 
 		logger, err := New(config)
-
 		require.NoError(t, err)
 		require.NotNil(t, logger)
 		assert.NotNil(t, logger.Logger)
 	})
 
-	t.Run("create default logger when config is nil", func(t *testing.T) {
+	t.Run("create logger with nil config", func(t *testing.T) {
 		t.Parallel()
 
 		logger, err := New(nil)
-
 		require.NoError(t, err)
 		require.NotNil(t, logger)
+	})
+
+	t.Run("return error by using invalid log level", func(t *testing.T) {
+		t.Parallel()
+
+		invalidLevel := "invalid"
+
+		config := &Config{
+			Level: &invalidLevel,
+		}
+
+		logger, err := New(config)
+		require.Error(t, err)
+		assert.Nil(t, logger)
+		assert.Contains(t, err.Error(), "failed to parse log level")
 	})
 }
 
@@ -80,56 +99,47 @@ func TestNewWithLevels(t *testing.T) {
 		{"run with panic level", "panic"},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			config := &Config{
-				Level: &tc.level,
-			}
-
-			logger, err := New(config)
-
-			require.NoError(t, err)
-			require.NotNil(t, logger)
-		})
-	}
-}
-
-func TestNewWithInvalidLevels(t *testing.T) {
-	t.Parallel()
-
-	t.Run("return error when invalid log level", func(t *testing.T) {
-		t.Parallel()
-
-		invalidLevel := "invalid"
-		config := &Config{
-			Level: &invalidLevel,
-		}
-
-		logger, err := New(config)
-
-		require.Error(t, err)
-		assert.Nil(t, logger)
-		assert.Contains(t, err.Error(), "failed to parse log level")
-	})
-}
-
-func TestNewWithInsensitiveLevel(t *testing.T) {
-	t.Parallel()
-
-	testCases := []string{"INFO", "Info", "DEBUG", "Debug"}
-
-	for _, level := range testCases {
-		t.Run(level, func(t *testing.T) {
-			t.Parallel()
+			level := testCase.level
 
 			config := &Config{
 				Level: &level,
 			}
 
 			logger, err := New(config)
+			require.NoError(t, err)
+			require.NotNil(t, logger)
+		})
+	}
+}
 
+func TestNewWithInsensitiveLevels(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		level string
+	}{
+		{"run with INFO level", "INFO"},
+		{"run with Info level", "Info"},
+		{"run with DEBUG level", "DEBUG"},
+		{"run with Debug level", "Debug"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			level := testCase.level
+
+			config := &Config{
+				Level: &level,
+			}
+
+			logger, err := New(config)
 			require.NoError(t, err)
 			require.NotNil(t, logger)
 		})
@@ -139,11 +149,10 @@ func TestNewWithInsensitiveLevel(t *testing.T) {
 func TestNewModule(t *testing.T) {
 	t.Parallel()
 
-	t.Run("return fx.Option", func(t *testing.T) {
+	t.Run("create logger module", func(t *testing.T) {
 		t.Parallel()
 
 		module := NewModule()
-
 		require.NotNil(t, module)
 	})
 }
