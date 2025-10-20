@@ -20,16 +20,56 @@ import (
 	redisPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
-// setupTestConfig creates a temporary config file and sets the environment variable.
-func setupTestConfig(t *testing.T, content string) {
+const (
+	// defaultConfigContent is the default content of the config file.
+	defaultConfigContent = `{
+			"database": {
+				"host": "localhost",
+				"port": 35432,
+				"user": "boilerplate_user",
+				"password": "boilerplate_password",
+				"db_name": "boilerplate",
+				"ssl_mode": false
+			},
+			"jwt": {
+				"issuer": "boilerplate",
+				"audience": "boilerplate_audience",
+				"secret_key": "test_secret_key"
+			},
+			"logger": {
+				"level": "info"
+			},
+			"redis": {
+				"addrs": ["localhost:36379"],
+				"password": "",
+				"db": 0
+			},
+			"server": {
+				"host": "localhost",
+				"port": 38080
+			}
+		}`
+)
+
+// beforeTest creates a temporary config file and sets the environment variable.
+func beforeTest(t *testing.T, content *string) {
 	t.Helper()
 
+	// create temporary directory
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
-	err := os.WriteFile(configPath, []byte(content), 0600)
+	// use default config content if content is nil
+	if content == nil {
+		configContent := defaultConfigContent
+		content = &configContent
+	}
+
+	// write default config to config file
+	err := os.WriteFile(configPath, []byte(*content), 0600)
 	require.NoError(t, err)
 
+	// set environment variable
 	t.Setenv("CONFIG_PATH", configPath)
 }
 
@@ -37,6 +77,7 @@ func setupTestConfig(t *testing.T, content string) {
 func startAndStopApp(t *testing.T, app *fx.App) {
 	t.Helper()
 
+	// create context to timeout the application start and stop
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -57,34 +98,8 @@ func startAndStopApp(t *testing.T, app *fx.App) {
 
 //nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
 func TestNew(t *testing.T) {
-	t.Run("create new application", func(t *testing.T) {
-		setupTestConfig(t, `{
-			"database": {
-				"host": "localhost",
-				"port": 35432,
-				"user": "boilerplate_user",
-				"password": "boilerplate_password",
-				"db_name": "boilerplate",
-				"ssl_mode": false
-			},
-			"jwt": {
-				"issuer": "boilerplate",
-				"audience": "boilerplate_audience",
-				"secret_key": "test_secret_key"
-			},
-			"logger": {
-				"level": "info"
-			},
-			"redis": {
-				"addrs": ["localhost:36379"],
-				"password": "",
-				"db": 0
-			},
-			"server": {
-				"host": "localhost",
-				"port": 38080
-			}
-		}`)
+	t.Run("create application", func(t *testing.T) {
+		beforeTest(t, nil)
 
 		app := New()
 
@@ -93,35 +108,9 @@ func TestNew(t *testing.T) {
 }
 
 //nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
-func TestNewWithStart(t *testing.T) {
+func TestStartAndStop(t *testing.T) {
 	t.Run("start and stop application", func(t *testing.T) {
-		setupTestConfig(t, `{
-			"database": {
-				"host": "localhost",
-				"port": 35432,
-				"user": "boilerplate_user",
-				"password": "boilerplate_password",
-				"db_name": "boilerplate",
-				"ssl_mode": false
-			},
-			"jwt": {
-				"issuer": "boilerplate",
-				"audience": "boilerplate_audience",
-				"secret_key": "test_secret_key"
-			},
-			"logger": {
-				"level": "info"
-			},
-			"redis": {
-				"addrs": ["localhost:36379"],
-				"password": "",
-				"db": 0
-			},
-			"server": {
-				"host": "localhost",
-				"port": 38080
-			}
-		}`)
+		beforeTest(t, nil)
 
 		app := New()
 		require.NotNil(t, app)
@@ -130,48 +119,10 @@ func TestNewWithStart(t *testing.T) {
 	})
 }
 
-//nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
 func TestRegisterHooks(t *testing.T) {
-	t.Run("call lifecycle hooks with fx.App to integration test", func(t *testing.T) {
-		setupTestConfig(t, `{
-			"database": {
-				"host": "localhost",
-				"port": 35432,
-				"user": "boilerplate_user",
-				"password": "boilerplate_password",
-				"db_name": "boilerplate",
-				"ssl_mode": false
-			},
-			"jwt": {
-				"issuer": "boilerplate",
-				"audience": "boilerplate_audience",
-				"secret_key": "test_secret_key"
-			},
-			"logger": {
-				"level": "info"
-			},
-			"redis": {
-				"addrs": ["localhost:36379"],
-				"password": "",
-				"db": 0
-			},
-			"server": {
-				"host": "localhost",
-				"port": 38080
-			}
-		}`)
-
-		app := New()
-		require.NotNil(t, app)
-
-		startAndStopApp(t, app)
-	})
-}
-
-func TestRegisterHooksDirectly(t *testing.T) {
 	t.Parallel()
 
-	t.Run("call lifecycle hooks directly with mocked lifecycle to unit test", func(t *testing.T) {
+	t.Run("call lifecycle hooks with mocked lifecycle", func(t *testing.T) {
 		t.Parallel()
 
 		var hookRegistered, onStartCalled bool
@@ -217,8 +168,8 @@ func (m *mockLifecycle) Append(hook fx.Hook) {
 	}
 }
 
-func TestNewWithInvalidConfig(t *testing.T) {
-	t.Run("fail to create app with invalid config", func(t *testing.T) {
+func TestNewReturnErrors(t *testing.T) {
+	t.Run("return error by using invalid config path", func(t *testing.T) {
 		// set non-existent config path
 		t.Setenv("CONFIG_PATH", "/non/existent/path/config.json")
 
@@ -242,8 +193,8 @@ func TestNewWithInvalidConfig(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
 func TestNewWithCustomConfig(t *testing.T) {
-	t.Run("create app with custom config", func(t *testing.T) {
-		content := `{
+	t.Run("create application with custom config", func(t *testing.T) {
+		configContent := `{
 			"database": {
 				"host": "localhost",
 				"port": 35432,
@@ -270,7 +221,7 @@ func TestNewWithCustomConfig(t *testing.T) {
 				"port": 38080
 			}
 		}`
-		setupTestConfig(t, content)
+		beforeTest(t, &configContent)
 
 		app := New()
 		require.NotNil(t, app)

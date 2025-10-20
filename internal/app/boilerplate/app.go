@@ -13,7 +13,7 @@ import (
 	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	jwtPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
-	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
+	redisPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
 // New creates a new application.
@@ -23,7 +23,7 @@ func New() *fx.App {
 		configPkg.NewModule(),
 		loggerPkg.NewModule(),
 		databasePkg.NewModule(),
-		redis.NewModule(),
+		redisPkg.NewModule(),
 		jwtPkg.NewModule(),
 		handlerPkg.NewModule(),
 		serverPkg.NewModule(),
@@ -38,7 +38,7 @@ func registerHooks(
 	lifecycle fx.Lifecycle,
 	dbConn *databasePkg.DB,
 	log *loggerPkg.Logger,
-	redisConn *redis.Redis,
+	redisConn *redisPkg.Redis,
 	server *serverPkg.Server,
 ) {
 	lifecycle.Append(fx.Hook{
