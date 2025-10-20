@@ -33,22 +33,39 @@ type Config struct {
 	SentinelAddrs []string `json:"sentinel_addrs"`
 }
 
+const (
+	// defaultAddr is default addr of redis.
+	defaultAddr = "localhost:6379"
+
+	// defaultPassword is default password of redis.
+	defaultPassword = "boilerplate_password"
+
+	// defaultDB is default DB of redis.
+	defaultDB = 0
+
+	// defaultMasterName is default master name of redis.
+	defaultMasterName = ""
+)
+
 // SetDefault sets default values.
 func (c *Config) SetDefault() {
 	if c.Addrs == nil {
-		c.Addrs = []string{"localhost:6379"}
+		c.Addrs = []string{defaultAddr}
 	}
 
 	if c.Password == nil {
-		c.Password = &[]string{"boilerplate_password"}[0]
+		password := defaultPassword
+		c.Password = &password
 	}
 
 	if c.DB == nil {
-		c.DB = &[]int{0}[0]
+		db := defaultDB
+		c.DB = &db
 	}
 
 	if c.MasterName == nil {
-		c.MasterName = &[]string{""}[0]
+		masterName := defaultMasterName
+		c.MasterName = &masterName
 	}
 
 	if c.SentinelAddrs == nil {
@@ -67,7 +84,6 @@ func NewModule() fx.Option {
 func New(config *Config) (*Redis, error) {
 	ctx := context.Background()
 
-	// set default
 	if config == nil {
 		config = &Config{}
 	}
@@ -81,7 +97,6 @@ func New(config *Config) (*Redis, error) {
 		DB:       *config.DB,
 	}
 
-	// set sentinel options if provided
 	if *config.MasterName != "" {
 		options.MasterName = *config.MasterName
 	}

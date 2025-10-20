@@ -5,49 +5,69 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestConfig_SetDefault(t *testing.T) {
+const (
+	// testAddr is the test addr of redis.
+	testAddr = "localhost:36379"
+
+	// testPassword is the test password of redis.
+	testPassword = "boilerplate_password"
+
+	// testDB is the test DB of redis.
+	testDB = 0
+
+	// testMasterName is the test master name of redis.
+	testMasterName = ""
+)
+
+func TestConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("set all defaults", func(t *testing.T) {
+	t.Run("set default values on redis config", func(t *testing.T) {
 		t.Parallel()
 
 		config := &Config{}
 		config.SetDefault()
 
-		require.Equal(t, []string{"localhost:6379"}, config.Addrs)
+		require.NotNil(t, config.Addrs)
+		assert.Equal(t, []string{defaultAddr}, config.Addrs)
 		require.NotNil(t, config.Password)
-		require.Equal(t, "boilerplate_password", *config.Password)
+		assert.Equal(t, defaultPassword, *config.Password)
 		require.NotNil(t, config.DB)
-		require.Equal(t, 0, *config.DB)
+		assert.Equal(t, defaultDB, *config.DB)
 		require.NotNil(t, config.MasterName)
-		require.Empty(t, *config.MasterName)
-		require.Equal(t, []string{}, config.SentinelAddrs)
+		assert.Equal(t, defaultMasterName, *config.MasterName)
+		require.NotNil(t, config.SentinelAddrs)
+		assert.Equal(t, []string{}, config.SentinelAddrs)
 	})
 
-	t.Run("preserve existing values", func(t *testing.T) {
+	t.Run("preserve existing values on redis config", func(t *testing.T) {
 		t.Parallel()
 
-		customPassword := "test_password"
-		customDB := 1
-		customMasterName := "test_master"
+		addrs := []string{testAddr}
+		password := testPassword
+		db := testDB
+		masterName := testMasterName
+		sentinelAddrs := []string{}
+
 		config := &Config{
-			Addrs:         []string{"redis1:6379", "redis2:6379"},
-			Password:      &customPassword,
-			DB:            &customDB,
-			MasterName:    &customMasterName,
-			SentinelAddrs: []string{"sentinel1:26379"},
+			Addrs:         addrs,
+			Password:      &password,
+			DB:            &db,
+			MasterName:    &masterName,
+			SentinelAddrs: sentinelAddrs,
 		}
 
 		config.SetDefault()
 
-		require.Equal(t, []string{"redis1:6379", "redis2:6379"}, config.Addrs)
-		require.Equal(t, "test_password", *config.Password)
-		require.Equal(t, 1, *config.DB)
-		require.Equal(t, "test_master", *config.MasterName)
-		require.Equal(t, []string{"sentinel1:26379"}, config.SentinelAddrs)
+		require.Equal(t, []string{testAddr}, config.Addrs)
+		require.Equal(t, testPassword, *config.Password)
+		require.Equal(t, testDB, *config.DB)
+		require.Equal(t, testMasterName, *config.MasterName)
+		require.Equal(t, []string{}, config.SentinelAddrs)
 	})
 }
 
@@ -57,12 +77,18 @@ func TestNew(t *testing.T) {
 	t.Run("create redis with valid config", func(t *testing.T) {
 		t.Parallel()
 
-		password := ""
-		db := 0
+		addrs := []string{testAddr}
+		password := testPassword
+		db := testDB
+		masterName := testMasterName
+		sentinelAddrs := []string{}
+
 		config := &Config{
-			Addrs:    []string{"localhost:36379"},
-			Password: &password,
-			DB:       &db,
+			Addrs:         addrs,
+			Password:      &password,
+			DB:            &db,
+			MasterName:    &masterName,
+			SentinelAddrs: sentinelAddrs,
 		}
 
 		redis, err := New(config)
@@ -82,24 +108,29 @@ func TestNew(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("create redis with nil config", func(t *testing.T) {
+	t.Run("return error by creating redis with nil config", func(t *testing.T) {
 		t.Parallel()
 
-		// will fail because default localhost:6379 is not available
 		_, err := New(nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to ping redis")
 	})
+}
 
-	t.Run("create redis with invalid address", func(t *testing.T) {
+func TestNewReturnErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return error by using invalid address", func(t *testing.T) {
 		t.Parallel()
 
-		password := ""
-		db := 0
+		invalidAddrs := []string{"invalid_test_host:9999"}
+		invalidPassword := "invalid_test_password"
+		invalidDB := 9999
+
 		config := &Config{
-			Addrs:    []string{"invalid_test_host:9999"},
-			Password: &password,
-			DB:       &db,
+			Addrs:    invalidAddrs,
+			Password: &invalidPassword,
+			DB:       &invalidDB,
 		}
 
 		_, err := New(config)
@@ -108,18 +139,24 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestNewWithSetGetOperations(t *testing.T) {
+func TestNewWithOperations(t *testing.T) {
 	t.Parallel()
 
-	t.Run("perform set and get operations", func(t *testing.T) {
+	t.Run("perform set, get, delete operations", func(t *testing.T) {
 		t.Parallel()
 
-		password := ""
-		db := 0
+		addrs := []string{testAddr}
+		password := testPassword
+		db := testDB
+		masterName := testMasterName
+		sentinelAddrs := []string{}
+
 		config := &Config{
-			Addrs:    []string{"localhost:36379"},
-			Password: &password,
-			DB:       &db,
+			Addrs:         addrs,
+			Password:      &password,
+			DB:            &db,
+			MasterName:    &masterName,
+			SentinelAddrs: sentinelAddrs,
 		}
 
 		redis, err := New(config)
@@ -158,15 +195,21 @@ func TestNewWithSetGetOperations(t *testing.T) {
 func TestNewWithExpiration(t *testing.T) {
 	t.Parallel()
 
-	t.Run("test key expiration", func(t *testing.T) {
+	t.Run("return error by using short ttl for key expiration", func(t *testing.T) {
 		t.Parallel()
 
-		password := ""
-		db := 0
+		addrs := []string{testAddr}
+		password := testPassword
+		db := testDB
+		masterName := testMasterName
+		sentinelAddrs := []string{}
+
 		config := &Config{
-			Addrs:    []string{"localhost:36379"},
-			Password: &password,
-			DB:       &db,
+			Addrs:         addrs,
+			Password:      &password,
+			DB:            &db,
+			MasterName:    &masterName,
+			SentinelAddrs: sentinelAddrs,
 		}
 
 		redis, err := New(config)
@@ -201,18 +244,19 @@ func TestNewWithExpiration(t *testing.T) {
 	})
 }
 
-func TestNewWithDifferentDB(t *testing.T) {
+func TestNewWithDifferentDBs(t *testing.T) {
 	t.Parallel()
 
 	t.Run("use different database index", func(t *testing.T) {
 		t.Parallel()
 
-		password := ""
+		addrs := []string{testAddr}
+		password := testPassword
 		db1 := 0
 		db2 := 1
 
 		redis1, err := New(&Config{
-			Addrs:    []string{"localhost:36379"},
+			Addrs:    addrs,
 			Password: &password,
 			DB:       &db1,
 		})
