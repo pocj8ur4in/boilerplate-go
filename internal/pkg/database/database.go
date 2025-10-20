@@ -60,38 +60,72 @@ type Config struct {
 	MaxIdle *int `json:"max_idle"`
 }
 
+const (
+	// defaultHost is default host of database.
+	defaultHost = "localhost"
+
+	// defaultPort is default port of database.
+	defaultPort = 5432
+
+	// defaultUser is default user of database.
+	defaultUser = "boilerplate_user"
+
+	// defaultPassword is default password of database.
+	defaultPassword = "boilerplate_password"
+
+	// defaultDBName is default name of database.
+	defaultDBName = "boilerplate"
+
+	// defaultSSLMode is default SSL mode of database.
+	defaultSSLMode = false
+
+	// defaultMaxConns is default maximum number of connections to database.
+	defaultMaxConns = 10
+
+	// defaultMaxIdle is default maximum number of idle connections to database.
+	defaultMaxIdle = 5
+)
+
 // SetDefault sets default values.
 func (c *Config) SetDefault() {
 	if c.Host == nil {
-		c.Host = &[]string{"localhost"}[0]
+		host := defaultHost
+		c.Host = &host
 	}
 
 	if c.Port == nil {
-		c.Port = &[]int{5432}[0]
+		port := defaultPort
+		c.Port = &port
 	}
 
 	if c.User == nil {
-		c.User = &[]string{"boilerplate_user"}[0]
+		user := defaultUser
+		c.User = &user
 	}
 
 	if c.Password == nil {
-		c.Password = &[]string{"boilerplate_password"}[0]
+		password := defaultPassword
+		c.Password = &password
 	}
 
 	if c.DBName == nil {
-		c.DBName = &[]string{"boilerplate"}[0]
+		dbName := defaultDBName
+		c.DBName = &dbName
 	}
 
 	if c.SSLMode == nil {
-		c.SSLMode = &[]bool{false}[0]
+		sslMode := defaultSSLMode
+		c.SSLMode = &sslMode
 	}
 
 	if c.MaxConns == nil {
-		c.MaxConns = &[]int{10}[0]
+		maxConns := defaultMaxConns
+		c.MaxConns = &maxConns
 	}
 
 	if c.MaxIdle == nil {
-		c.MaxIdle = &[]int{5}[0]
+		maxIdle := defaultMaxIdle
+		c.MaxIdle = &maxIdle
 	}
 }
 
@@ -114,9 +148,14 @@ func New(config *Config) (*DB, error) {
 	config.SetDefault()
 
 	// build database connection string
+	sslmodeStr := "disable"
+	if *config.SSLMode {
+		sslmodeStr = "require"
+	}
+
 	connString := "host=" + *config.Host + " port=" + strconv.Itoa(*config.Port) +
 		" user=" + *config.User + " password=" + *config.Password + " dbname=" + *config.DBName +
-		" sslmode=" + map[bool]string{true: "require", false: "disable"}[*config.SSLMode]
+		" sslmode=" + sslmodeStr
 
 	// parse database connection pool config
 	poolConfig, err := pgxpool.ParseConfig(connString)
