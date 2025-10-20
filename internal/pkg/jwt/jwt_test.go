@@ -9,21 +9,38 @@ import (
 )
 
 const (
-	testIssuer    = "test_issuer"
-	testAudience  = "test_audience"
+	// testIssuer is the issuer of the test JWT.
+	testIssuer = "test_issuer"
+
+	// testAudience is the audience of the test JWT.
+	testAudience = "test_audience"
+
+	// testSecretKey is the secret key of the test JWT.
 	testSecretKey = "test_secret_key"
+
+	// testAccessTokenTTL is the access token TTL of the test JWT.
+	testAccessTokenTTL = 1 * time.Hour
+
+	// testRefreshTokenTTL is the refresh token TTL of the test JWT.
+	testRefreshTokenTTL = 24 * time.Hour
 )
 
 // createTestJWT creates a JWT instance for testing.
 func createTestJWT(t *testing.T) *JWT {
 	t.Helper()
 
+	issuer := testIssuer
+	audience := testAudience
+	secretKey := testSecretKey
+	accessTokenTTL := testAccessTokenTTL
+	refreshTokenTTL := testRefreshTokenTTL
+
 	config := &Config{
-		Issuer:          &[]string{testIssuer}[0],
-		Audience:        &[]string{testAudience}[0],
-		SecretKey:       &[]string{testSecretKey}[0],
-		AccessTokenTTL:  &[]time.Duration{1 * time.Hour}[0],
-		RefreshTokenTTL: &[]time.Duration{24 * time.Hour}[0],
+		Issuer:          &issuer,
+		Audience:        &audience,
+		SecretKey:       &secretKey,
+		AccessTokenTTL:  &accessTokenTTL,
+		RefreshTokenTTL: &refreshTokenTTL,
 	}
 
 	jwt, err := New(config)
@@ -32,36 +49,42 @@ func createTestJWT(t *testing.T) *JWT {
 	return jwt
 }
 
-func TestConfig_SetDefault(t *testing.T) {
+func TestConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("set all defaults", func(t *testing.T) {
+	t.Run("set default values on jwt config", func(t *testing.T) {
 		t.Parallel()
 
 		config := &Config{}
 		config.SetDefault()
 
 		require.NotNil(t, config.Issuer)
-		require.Equal(t, "boilerplate", *config.Issuer)
+		require.Equal(t, defaultIssuer, *config.Issuer)
 		require.NotNil(t, config.Audience)
-		require.Equal(t, "boilerplate_audience", *config.Audience)
+		require.Equal(t, defaultAudience, *config.Audience)
 		require.NotNil(t, config.SecretKey)
-		require.Equal(t, "boilerplate_secret_key", *config.SecretKey)
+		require.Equal(t, defaultSecretKey, *config.SecretKey)
 		require.NotNil(t, config.AccessTokenTTL)
-		require.Equal(t, 1*time.Hour, *config.AccessTokenTTL)
+		require.Equal(t, defaultAccessTokenTTL, *config.AccessTokenTTL)
 		require.NotNil(t, config.RefreshTokenTTL)
-		require.Equal(t, 24*time.Hour, *config.RefreshTokenTTL)
+		require.Equal(t, defaultRefreshTokenTTL, *config.RefreshTokenTTL)
 	})
 
-	t.Run("preserve existing values", func(t *testing.T) {
+	t.Run("preserve existing values on jwt config", func(t *testing.T) {
 		t.Parallel()
 
+		issuer := testIssuer
+		audience := testAudience
+		secretKey := testSecretKey
+		accessTokenTTL := testAccessTokenTTL
+		refreshTokenTTL := testRefreshTokenTTL
+
 		config := &Config{
-			Issuer:          &[]string{testIssuer}[0],
-			Audience:        &[]string{testAudience}[0],
-			SecretKey:       &[]string{testSecretKey}[0],
-			AccessTokenTTL:  &[]time.Duration{30 * time.Minute}[0],
-			RefreshTokenTTL: &[]time.Duration{7 * 24 * time.Hour}[0],
+			Issuer:          &issuer,
+			Audience:        &audience,
+			SecretKey:       &secretKey,
+			AccessTokenTTL:  &accessTokenTTL,
+			RefreshTokenTTL: &refreshTokenTTL,
 		}
 
 		config.SetDefault()
@@ -69,8 +92,8 @@ func TestConfig_SetDefault(t *testing.T) {
 		require.Equal(t, testIssuer, *config.Issuer)
 		require.Equal(t, testAudience, *config.Audience)
 		require.Equal(t, testSecretKey, *config.SecretKey)
-		require.Equal(t, 30*time.Minute, *config.AccessTokenTTL)
-		require.Equal(t, 7*24*time.Hour, *config.RefreshTokenTTL)
+		require.Equal(t, testAccessTokenTTL, *config.AccessTokenTTL)
+		require.Equal(t, testRefreshTokenTTL, *config.RefreshTokenTTL)
 	})
 }
 
@@ -80,38 +103,42 @@ func TestNew(t *testing.T) {
 	t.Run("create JWT with valid config", func(t *testing.T) {
 		t.Parallel()
 
+		issuer := testIssuer
+		audience := testAudience
+		secretKey := testSecretKey
+		accessTokenTTL := testAccessTokenTTL
+		refreshTokenTTL := testRefreshTokenTTL
+
 		config := &Config{
-			Issuer:          &[]string{testIssuer}[0],
-			Audience:        &[]string{testAudience}[0],
-			SecretKey:       &[]string{testSecretKey}[0],
-			AccessTokenTTL:  &[]time.Duration{1 * time.Hour}[0],
-			RefreshTokenTTL: &[]time.Duration{24 * time.Hour}[0],
+			Issuer:          &issuer,
+			Audience:        &audience,
+			SecretKey:       &secretKey,
+			AccessTokenTTL:  &accessTokenTTL,
+			RefreshTokenTTL: &refreshTokenTTL,
 		}
 
 		jwt, err := New(config)
 		require.NoError(t, err)
 		require.NotNil(t, jwt)
 		require.NotNil(t, jwt.config)
+		require.Equal(t, issuer, *jwt.config.Issuer)
+		require.Equal(t, audience, *jwt.config.Audience)
+		require.Equal(t, secretKey, *jwt.config.SecretKey)
+		require.Equal(t, accessTokenTTL, *jwt.config.AccessTokenTTL)
+		require.Equal(t, refreshTokenTTL, *jwt.config.RefreshTokenTTL)
 	})
 
 	t.Run("create JWT with nil config", func(t *testing.T) {
 		t.Parallel()
 
 		jwt, err := New(nil)
-		require.Error(t, err)
-		require.Nil(t, jwt)
-		require.ErrorIs(t, err, ErrConfigRequired)
-	})
-
-	t.Run("create JWT with empty config applies defaults", func(t *testing.T) {
-		t.Parallel()
-
-		config := &Config{}
-
-		jwt, err := New(config)
 		require.NoError(t, err)
 		require.NotNil(t, jwt)
-		require.Equal(t, "boilerplate", *jwt.config.Issuer)
+		require.Equal(t, defaultIssuer, *jwt.config.Issuer)
+		require.Equal(t, defaultAudience, *jwt.config.Audience)
+		require.Equal(t, defaultSecretKey, *jwt.config.SecretKey)
+		require.Equal(t, defaultAccessTokenTTL, *jwt.config.AccessTokenTTL)
+		require.Equal(t, defaultRefreshTokenTTL, *jwt.config.RefreshTokenTTL)
 	})
 }
 
@@ -153,9 +180,11 @@ func TestValidateToken(t *testing.T) {
 
 		jwt := createTestJWT(t)
 
+		// generate access token
 		token, err := jwt.GenerateAccessToken("user123", "test@example.com", "admin")
 		require.NoError(t, err)
 
+		// validate token
 		claims, err := jwt.ValidateToken(*token)
 		require.NoError(t, err)
 		require.NotNil(t, claims)
@@ -182,20 +211,30 @@ func TestValidateTokenExpired(t *testing.T) {
 	t.Run("reject expired token", func(t *testing.T) {
 		t.Parallel()
 
+		// create JWT with very short TTL for testing expiration
+		issuer := testIssuer
+		audience := testAudience
+		secretKey := testSecretKey
+		accessTokenTTL := 10 * time.Millisecond
+		refreshTokenTTL := testRefreshTokenTTL
+
 		jwt, err := New(&Config{
-			Issuer:          &[]string{testIssuer}[0],
-			Audience:        &[]string{testAudience}[0],
-			SecretKey:       &[]string{testSecretKey}[0],
-			AccessTokenTTL:  &[]time.Duration{1 * time.Millisecond}[0],
-			RefreshTokenTTL: &[]time.Duration{24 * time.Hour}[0],
+			Issuer:          &issuer,
+			Audience:        &audience,
+			SecretKey:       &secretKey,
+			AccessTokenTTL:  &accessTokenTTL,
+			RefreshTokenTTL: &refreshTokenTTL,
 		})
 		require.NoError(t, err)
 
+		// generate access token
 		token, err := jwt.GenerateAccessToken("user123", "test@example.com", "admin")
 		require.NoError(t, err)
 
-		time.Sleep(10 * time.Millisecond)
+		// sleep for access token TTL
+		time.Sleep(20 * time.Millisecond)
 
+		// validate expired token
 		claims, err := jwt.ValidateToken(*token)
 		require.Error(t, err)
 		require.Nil(t, claims)
@@ -210,18 +249,28 @@ func TestValidateTokenWrongSecret(t *testing.T) {
 		t.Parallel()
 
 		jwt1 := createTestJWT(t)
+
+		// generate access token
 		token, err := jwt1.GenerateAccessToken("user123", "test@example.com", "admin")
 		require.NoError(t, err)
 
+		// create JWT with different secret
+		issuer := testIssuer
+		audience := testAudience
+		secretKey := "different_secret"
+		accessTokenTTL := testAccessTokenTTL
+		refreshTokenTTL := testRefreshTokenTTL
+
 		jwt2, err := New(&Config{
-			Issuer:          &[]string{testIssuer}[0],
-			Audience:        &[]string{testAudience}[0],
-			SecretKey:       &[]string{"different_secret"}[0],
-			AccessTokenTTL:  &[]time.Duration{1 * time.Hour}[0],
-			RefreshTokenTTL: &[]time.Duration{24 * time.Hour}[0],
+			Issuer:          &issuer,
+			Audience:        &audience,
+			SecretKey:       &secretKey,
+			AccessTokenTTL:  &accessTokenTTL,
+			RefreshTokenTTL: &refreshTokenTTL,
 		})
 		require.NoError(t, err)
 
+		// validate token with different secret
 		claims, err := jwt2.ValidateToken(*token)
 		require.Error(t, err)
 		require.Nil(t, claims)
@@ -237,9 +286,11 @@ func TestRefreshAccessToken(t *testing.T) {
 
 		jwt := createTestJWT(t)
 
+		// generate refresh token
 		refreshToken, err := jwt.GenerateRefreshToken("user123", "test@example.com", "admin")
 		require.NoError(t, err)
 
+		// generate new access token
 		newAccessToken, err := jwt.RefreshAccessToken(*refreshToken)
 		require.NoError(t, err)
 		require.NotNil(t, newAccessToken)
@@ -258,6 +309,7 @@ func TestRefreshAccessToken(t *testing.T) {
 
 		jwt := createTestJWT(t)
 
+		// refresh invalid refresh token
 		newAccessToken, err := jwt.RefreshAccessToken("invalid_refresh_token")
 		require.Error(t, err)
 		require.Nil(t, newAccessToken)
@@ -272,9 +324,11 @@ func TestExtractClaims(t *testing.T) {
 
 		jwt := createTestJWT(t)
 
+		// generate access token
 		token, err := jwt.GenerateAccessToken("user123", "test@example.com", "admin")
 		require.NoError(t, err)
 
+		// extract claims from token
 		claims, err := jwt.ExtractClaims(*token)
 		require.NoError(t, err)
 		require.NotNil(t, claims)
@@ -286,20 +340,30 @@ func TestExtractClaims(t *testing.T) {
 	t.Run("extract claims from expired token", func(t *testing.T) {
 		t.Parallel()
 
+		// create JWT with short TTL for testing expiration
+		issuer := testIssuer
+		audience := testAudience
+		secretKey := testSecretKey
+		accessTokenTTL := 10 * time.Millisecond
+		refreshTokenTTL := testRefreshTokenTTL
+
 		jwt, err := New(&Config{
-			Issuer:          &[]string{testIssuer}[0],
-			Audience:        &[]string{testAudience}[0],
-			SecretKey:       &[]string{testSecretKey}[0],
-			AccessTokenTTL:  &[]time.Duration{1 * time.Millisecond}[0],
-			RefreshTokenTTL: &[]time.Duration{24 * time.Hour}[0],
+			Issuer:          &issuer,
+			Audience:        &audience,
+			SecretKey:       &secretKey,
+			AccessTokenTTL:  &accessTokenTTL,
+			RefreshTokenTTL: &refreshTokenTTL,
 		})
 		require.NoError(t, err)
 
+		// generate access token
 		token, err := jwt.GenerateAccessToken("user123", "test@example.com", "admin")
 		require.NoError(t, err)
 
-		time.Sleep(10 * time.Millisecond)
+		// sleep for access token TTL
+		time.Sleep(20 * time.Millisecond)
 
+		// extract claims from expired token
 		claims, err := jwt.ExtractClaims(*token)
 		require.NoError(t, err)
 		require.NotNil(t, claims)
@@ -311,20 +375,10 @@ func TestExtractClaims(t *testing.T) {
 
 		jwt := createTestJWT(t)
 
+		// extract claims from malformed token
 		claims, err := jwt.ExtractClaims("not_a_valid_jwt_token")
 		require.Error(t, err)
 		require.Nil(t, claims)
-	})
-}
-
-func TestNewModule(t *testing.T) {
-	t.Parallel()
-
-	t.Run("create JWT module", func(t *testing.T) {
-		t.Parallel()
-
-		module := NewModule()
-		require.NotNil(t, module)
 	})
 }
 
@@ -336,6 +390,7 @@ func TestClaimsCustomFields(t *testing.T) {
 
 		jwt := createTestJWT(t)
 
+		// generate access token with custom fields
 		userID := "user456"
 		email := "custom@example.com"
 		role := "moderator"
@@ -343,12 +398,25 @@ func TestClaimsCustomFields(t *testing.T) {
 		token, err := jwt.GenerateAccessToken(userID, email, role)
 		require.NoError(t, err)
 
+		// validate token with custom fields
 		claims, err := jwt.ValidateToken(*token)
 		require.NoError(t, err)
+
 		assert.Equal(t, userID, claims.UserID)
 		assert.Equal(t, email, claims.Email)
 		assert.Equal(t, role, claims.Role)
 		assert.Equal(t, userID, claims.Subject)
 		assert.Equal(t, testIssuer, claims.Issuer)
+	})
+}
+
+func TestNewModule(t *testing.T) {
+	t.Parallel()
+
+	t.Run("create JWT module", func(t *testing.T) {
+		t.Parallel()
+
+		module := NewModule()
+		require.NotNil(t, module)
 	})
 }

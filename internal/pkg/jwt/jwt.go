@@ -11,9 +11,6 @@ import (
 )
 
 var (
-	// ErrConfigRequired returned when the config is required.
-	ErrConfigRequired = errors.New("jwt config is required")
-
 	// ErrInvalidToken returned when the token is invalid.
 	ErrInvalidToken = errors.New("invalid token")
 
@@ -51,26 +48,48 @@ type Config struct {
 	RefreshTokenTTL *time.Duration `json:"refresh_token_ttl"`
 }
 
+const (
+	// defaultIssuer is default issuer of JWT.
+	defaultIssuer = "boilerplate"
+
+	// defaultAudience is default audience of JWT.
+	defaultAudience = "boilerplate_audience"
+
+	// defaultSecretKey is default secret key of JWT.
+	defaultSecretKey = "boilerplate_secret_key"
+
+	// defaultAccessTokenTTL is default access token TTL of JWT.
+	defaultAccessTokenTTL = 1 * time.Hour
+
+	// defaultRefreshTokenTTL is default refresh token TTL of JWT.
+	defaultRefreshTokenTTL = 24 * time.Hour
+)
+
 // SetDefault sets default values.
 func (c *Config) SetDefault() {
 	if c.Issuer == nil {
-		c.Issuer = &[]string{"boilerplate"}[0]
+		issuer := defaultIssuer
+		c.Issuer = &issuer
 	}
 
 	if c.Audience == nil {
-		c.Audience = &[]string{"boilerplate_audience"}[0]
+		audience := defaultAudience
+		c.Audience = &audience
 	}
 
 	if c.SecretKey == nil {
-		c.SecretKey = &[]string{"boilerplate_secret_key"}[0]
+		secretKey := defaultSecretKey
+		c.SecretKey = &secretKey
 	}
 
 	if c.AccessTokenTTL == nil {
-		c.AccessTokenTTL = &[]time.Duration{1 * time.Hour}[0]
+		accessTokenTTL := defaultAccessTokenTTL
+		c.AccessTokenTTL = &accessTokenTTL
 	}
 
 	if c.RefreshTokenTTL == nil {
-		c.RefreshTokenTTL = &[]time.Duration{24 * time.Hour}[0]
+		refreshTokenTTL := defaultRefreshTokenTTL
+		c.RefreshTokenTTL = &refreshTokenTTL
 	}
 }
 
@@ -85,7 +104,7 @@ type Claims struct {
 	// Role is role of JWT.
 	Role string `json:"role"`
 
-	// RegisteredClaims is registered claims of JWT.
+	// RegisteredClaims provides registered claims of JWT.
 	jwt.RegisteredClaims
 }
 
@@ -99,7 +118,7 @@ func NewModule() fx.Option {
 // New creates a new JWT instance.
 func New(config *Config) (*JWT, error) {
 	if config == nil {
-		return nil, ErrConfigRequired
+		config = &Config{}
 	}
 
 	config.SetDefault()
@@ -142,19 +161,19 @@ func (j *JWT) generateToken(userID, email, role string, ttl time.Duration) (*str
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	// sign token
-	signedToken, err := token.SignedString([]byte(*j.config.SecretKey))
+	signedTokenStr, err := token.SignedString([]byte(*j.config.SecretKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign token: %w", err)
 	}
 
-	return &signedToken, nil
+	return &signedTokenStr, nil
 }
 
 // ValidateToken validates a JWT token and returns the claims.
-func (j *JWT) ValidateToken(tokenString string) (*Claims, error) {
+func (j *JWT) ValidateToken(tokenStr string) (*Claims, error) {
 	// parse token
 	token, err := jwt.ParseWithClaims(
-		tokenString,
+		tokenStr,
 		&Claims{},
 		func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -165,8 +184,9 @@ func (j *JWT) ValidateToken(tokenString string) (*Claims, error) {
 		},
 	)
 	if err != nil {
+		// return error if token is expired
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrExpiredToken
+			return nil, fmt.Errorf("%w: %w", ErrExpiredToken, err)
 		}
 
 		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
