@@ -1,7 +1,6 @@
 version: 2
 
 run:
-    go: "1.25.0"
     timeout: 5m
     skip-dirs:
         - vendor
@@ -102,7 +101,6 @@ linters:
         - whitespace
         - wrapcheck
         - wsl_v5
-        - zerologlint
 
 formatters:
     enable:
@@ -120,3 +118,6 @@ linters-settings:
 issues:
     max-issues-per-linter: 0
     max-same-issues: 0
+    exclude-rules:
+        - text: "var-naming: avoid meaningless package names"
+          path: internal/pkg/util

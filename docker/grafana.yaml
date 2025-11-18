@@ -1,0 +1,19 @@
+services:
+    boilerplate-grafana:
+        image: grafana/grafana:latest
+        container_name: boilerplate-grafana
+        ports:
+            - '33000:3000'
+        environment:
+            - GF_SECURITY_ADMIN_USER=boilerplate-admin
+            - GF_SECURITY_ADMIN_PASSWORD=boilerplate-admin-password
+            - GF_USERS_ALLOW_SIGN_UP=false
+        volumes:
+            - grafana_data:/var/lib/grafana
+            - ./grafana/provisioning:/etc/grafana/provisioning
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+        depends_on:
+            - boilerplate-prometheus
+

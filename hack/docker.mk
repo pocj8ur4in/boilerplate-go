@@ -15,7 +15,11 @@ docker:
 	fi
 	@if [ "$(TARGET)" = "dev" ]; then \
 		echo "$(BLUE)Running project on docker with dev environment...$(RESET)"; \
-		docker-compose -f $(CURDIR)/docker-compose.yaml up --build; \
+		if docker compose version > /dev/null 2>&1; then \
+			docker compose -f $(CURDIR)/docker-compose.yaml up --build; \
+		elif command -v docker-compose > /dev/null; then \
+			docker-compose -f $(CURDIR)/docker-compose.yaml up --build; \
+		fi; \
 	else \
 		echo "$(RED)unknown target command: $(TARGET)$(RESET)"; \
 		exit 1; \

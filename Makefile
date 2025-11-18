@@ -69,9 +69,9 @@ prepare:
 		else \
 			echo "$(YELLOW)trying to install go from official binary...$(RESET)"; \
 			mkdir -p /tmp/go && cd /tmp/go; \
-			curl -L -o go1.23.6.linux-amd64.tar.gz https://go.dev/dl/go1.23.6.linux-amd64.tar.gz; \
-			if [ -f go1.23.6.linux-amd64.tar.gz ]; then \
-				sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.23.6.linux-amd64.tar.gz; \
+			curl -L -o go1.25.linux-amd64.tar.gz https://go.dev/dl/go1.25.linux-amd64.tar.gz; \
+			if [ -f go1.25.linux-amd64.tar.gz ]; then \
+				sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.25.linux-amd64.tar.gz; \
 				if [ -n "$$ZSH_VERSION" ]; then echo 'export PATH=$$PATH:/usr/local/go/bin' >> ~/.zshrc; fi; \
 				if [ -n "$$BASH_VERSION" ]; then echo 'export PATH=$$PATH:/usr/local/go/bin' >> ~/.bashrc; fi; \
 				export PATH=$$PATH:/usr/local/go/bin; \

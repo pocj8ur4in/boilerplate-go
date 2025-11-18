@@ -1,0 +1,15 @@
+services:
+    boilerplate-redis-exporter:
+        image: oliver006/redis_exporter:latest
+        container_name: boilerplate-redis-exporter
+        environment:
+            - REDIS_ADDR=boilerplate-redis:6379
+        ports:
+            - '39121:9121'
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+        depends_on:
+            boilerplate-redis:
+                condition: service_healthy
+

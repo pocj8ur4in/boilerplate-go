@@ -1,0 +1,21 @@
+services:
+    boilerplate-redis:
+        image: redis:8-alpine
+        container_name: boilerplate-redis
+        ports:
+            - '36379:6379'
+        volumes:
+            - redis_data:/data
+            - ./redis.conf:/etc/redis/redis.conf:ro
+        command:
+            - redis-server
+            - /etc/redis/redis.conf
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+

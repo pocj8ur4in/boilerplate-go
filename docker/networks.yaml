@@ -1,0 +1,3 @@
+networks:
+    boilerplate-network:
+        driver: bridge

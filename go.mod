@@ -1,6 +1,8 @@
 module github.com/pocj8ur4in/boilerplate-go
 
-go 1.23.6
+go 1.25
+
+toolchain go1.25.0
 
 require (
 	github.com/getkin/kin-openapi v0.133.0

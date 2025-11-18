@@ -1,0 +1,15 @@
+services:
+    boilerplate-postgres-exporter:
+        image: prometheuscommunity/postgres-exporter:latest
+        container_name: boilerplate-postgres-exporter
+        environment:
+            - DATA_SOURCE_NAME=postgresql://boilerplate_user:boilerplate_password@boilerplate-postgres:5432/boilerplate?sslmode=disable
+        ports:
+            - '39187:9187'
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+        depends_on:
+            boilerplate-postgres:
+                condition: service_healthy
+

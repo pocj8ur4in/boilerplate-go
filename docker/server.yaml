@@ -1,0 +1,25 @@
+services:
+    boilerplate-server:
+        build:
+            context: ..
+            dockerfile: Dockerfile
+            target: dev
+        image: boilerplate-server:dev
+        container_name: boilerplate-server
+        ports:
+            - '38080:8080'
+        environment:
+            - CGO_ENABLED=1
+            - CONFIG_PATH=config.json
+        volumes:
+            - ../:/app
+            - ../config.json:/app/config.json
+        depends_on:
+            boilerplate-postgres:
+                condition: service_healthy
+            boilerplate-redis:
+                condition: service_healthy
+        restart: unless-stopped
+        networks:
+            - boilerplate-network
+
