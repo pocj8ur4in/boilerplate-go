@@ -77,7 +77,7 @@ jobs:
               run: cp config.example.json config.json
 
             - name: Run Go tests
-              run: go test -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v -e /internal/gen/ -e /cmd/)
+              run: go test -v -p=1 -parallel=4 -timeout=15m -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v -e /internal/gen/ -e /cmd/)
 
             - name: Upload coverage to Codecov
               uses: codecov/codecov-action@v5
