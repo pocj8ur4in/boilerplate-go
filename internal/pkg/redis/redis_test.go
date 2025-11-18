@@ -49,14 +49,14 @@ func TestConfig(t *testing.T) {
 
 		addrs := []string{testAddr}
 		password := testPassword
-		db := testDB
+		redisDB := testDB
 		masterName := testMasterName
 		sentinelAddrs := []string{}
 
 		config := &Config{
 			Addrs:         addrs,
 			Password:      &password,
-			DB:            &db,
+			DB:            &redisDB,
 			MasterName:    &masterName,
 			SentinelAddrs: sentinelAddrs,
 		}
@@ -79,14 +79,14 @@ func TestNew(t *testing.T) {
 
 		addrs := []string{testAddr}
 		password := testPassword
-		db := testDB
+		redisDB := testDB
 		masterName := testMasterName
 		sentinelAddrs := []string{}
 
 		config := &Config{
 			Addrs:         addrs,
 			Password:      &password,
-			DB:            &db,
+			DB:            &redisDB,
 			MasterName:    &masterName,
 			SentinelAddrs: sentinelAddrs,
 		}
@@ -147,14 +147,14 @@ func TestNewWithOperations(t *testing.T) {
 
 		addrs := []string{testAddr}
 		password := testPassword
-		db := testDB
+		redisDB := testDB
 		masterName := testMasterName
 		sentinelAddrs := []string{}
 
 		config := &Config{
 			Addrs:         addrs,
 			Password:      &password,
-			DB:            &db,
+			DB:            &redisDB,
 			MasterName:    &masterName,
 			SentinelAddrs: sentinelAddrs,
 		}
@@ -200,14 +200,14 @@ func TestNewWithExpiration(t *testing.T) {
 
 		addrs := []string{testAddr}
 		password := testPassword
-		db := testDB
+		redisDB := testDB
 		masterName := testMasterName
 		sentinelAddrs := []string{}
 
 		config := &Config{
 			Addrs:         addrs,
 			Password:      &password,
-			DB:            &db,
+			DB:            &redisDB,
 			MasterName:    &masterName,
 			SentinelAddrs: sentinelAddrs,
 		}
