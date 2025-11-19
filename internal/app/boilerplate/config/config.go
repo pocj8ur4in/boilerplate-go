@@ -4,9 +4,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/caarlos0/env/v11"
 	"go.uber.org/fx"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server"
@@ -19,64 +21,27 @@ import (
 // Config represents the configuration for the app.
 type Config struct {
 	// Logger provides logger configuration.
-	Logger *logger.Config `json:"logger"`
+	Logger logger.Config `envPrefix:"LOG_" json:"logger"`
 
 	// Database provides database configuration.
-	Database *database.Config `json:"database"`
+	Database database.Config `envPrefix:"DB_" json:"database"`
 
 	// JWT provides JWT configuration.
-	JWT *jwt.Config `json:"jwt"`
+	JWT jwt.Config `envPrefix:"JWT_" json:"jwt"`
 
 	// Redis provides redis configuration.
-	Redis *redis.Config `json:"redis"`
+	Redis redis.Config `envPrefix:"REDIS_" json:"redis"`
 
 	// Server provides server configuration.
-	Server *server.Config `json:"server"`
-}
+	Server server.Config `envPrefix:"SERVER_" json:"server"`
 
-// SetDefault sets the default values.
-func (c *Config) SetDefault() {
-	// set logger
-	if c.Logger == nil {
-		c.Logger = &logger.Config{}
-	}
-
-	c.Logger.SetDefault()
-
-	// set database
-	if c.Database == nil {
-		c.Database = &database.Config{}
-	}
-
-	c.Database.SetDefault()
-
-	// set jwt
-	if c.JWT == nil {
-		c.JWT = &jwt.Config{}
-	}
-
-	c.JWT.SetDefault()
-
-	// set redis
-	if c.Redis == nil {
-		c.Redis = &redis.Config{}
-	}
-
-	c.Redis.SetDefault()
-
-	// set server
-	if c.Server == nil {
-		c.Server = &server.Config{}
-	}
-
-	c.Server.SetDefault()
 }
 
 // NewModule provides module for config.
 func NewModule() fx.Option {
 	return fx.Module("config",
 		fx.Provide(
-			LoadFromFile,
+			Load,
 			ProvideLoggerConfig,
 			ProvideDatabaseConfig,
 			ProvideJWTConfig,
@@ -86,44 +51,62 @@ func NewModule() fx.Option {
 	)
 }
 
-// New creates a new configuration.
-func New() *Config {
-	return &Config{}
+// Load loads the configuration.
+func Load() (*Config, error) {
+	config := &Config{}
+
+	// load from env
+	if err := loadFromEnv(config); err != nil {
+		return nil, fmt.Errorf("failed to load config from env: %w", err)
+	}
+
+	// load from file
+	configPath := getConfigPath()
+	if configPath != "" {
+		if err := loadFromFile(config, configPath); err != nil {
+			log.Printf("failed to load config from file: %v", err)
+		}
+	}
+
+	return config, nil
 }
 
-// LoadFromFile loads the configuration from file.
-func LoadFromFile() (*Config, error) {
-	cfg := New()
+// loadFromEnv loads the configuration from env with setting default values.
+func loadFromEnv(cfg *Config) error {
+	if err := env.Parse(cfg); err != nil {
+		return fmt.Errorf("failed to parse config from env: %w", err)
+	}
 
-	configPath := getConfigPath()
+	return nil
+}
 
+// loadFromFile loads the configuration from file.
+func loadFromFile(config *Config, configPath string) error {
 	// clean and validate config path
 	configPath = filepath.Clean(configPath)
 
+	// join path with working directory if not absolute
 	if !filepath.IsAbs(configPath) {
 		wd, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get working directory: %w", err)
+			return fmt.Errorf("failed to get working directory: %w", err)
 		}
 
 		configPath = filepath.Join(wd, configPath)
 	}
 
-	// read file
+	// read config file from path
 	content, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to read file: %w", err)
 	}
 
 	// unmarshal json to config
-	if err = json.Unmarshal(content, cfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal json: %w", err)
+	if err = json.Unmarshal(content, config); err != nil {
+		return fmt.Errorf("failed to unmarshal json: %w", err)
 	}
 
-	// set default values
-	cfg.SetDefault()
-
-	return cfg, nil
+	return nil
 }
 
 // getConfigPath gets the config file path.
@@ -137,26 +120,26 @@ func getConfigPath() string {
 }
 
 // ProvideLoggerConfig provides logger configuration.
-func ProvideLoggerConfig(config *Config) *logger.Config {
+func ProvideLoggerConfig(config *Config) logger.Config {
 	return config.Logger
 }
 
 // ProvideDatabaseConfig provides database configuration.
-func ProvideDatabaseConfig(config *Config) *database.Config {
+func ProvideDatabaseConfig(config *Config) database.Config {
 	return config.Database
 }
 
 // ProvideJWTConfig provides JWT configuration.
-func ProvideJWTConfig(config *Config) *jwt.Config {
+func ProvideJWTConfig(config *Config) jwt.Config {
 	return config.JWT
 }
 
 // ProvideRedisConfig provides redis configuration.
-func ProvideRedisConfig(config *Config) *redis.Config {
+func ProvideRedisConfig(config *Config) redis.Config {
 	return config.Redis
 }
 
 // ProvideServerConfig provides server configuration.
-func ProvideServerConfig(config *Config) *server.Config {
+func ProvideServerConfig(config *Config) server.Config {
 	return config.Server
 }

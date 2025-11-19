@@ -5,6 +5,7 @@ go 1.25
 toolchain go1.25.0
 
 require (
+	github.com/caarlos0/env/v11 v11.3.1
 	github.com/docker/go-connections v0.6.0
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/go-chi/chi/v5 v5.2.3
