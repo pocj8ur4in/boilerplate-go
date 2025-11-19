@@ -1,4 +1,4 @@
-// Package jwt provides JWT token management.
+// Package jwt provides JWT client.
 package jwt
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	jwtPkg "github.com/golang-jwt/jwt/v5"
 	"go.uber.org/fx"
 )
 
@@ -24,73 +24,46 @@ var (
 	ErrUnexpectedSigningMethod = errors.New("unexpected signing method")
 )
 
-// JWT provides JWT token management.
-type JWT struct {
-	// config provides JWT configuration.
-	config *Config
+// Client defines the interface for JWT operations.
+type Client interface {
+	// GenerateAccessToken generates an access token.
+	GenerateAccessToken(userID, email, role string) (*string, error)
+
+	// GenerateRefreshToken generates a refresh token.
+	GenerateRefreshToken(userID, email, role string) (*string, error)
+
+	// ValidateToken validates a JWT token and returns the claims.
+	ValidateToken(tokenStr string) (*Claims, error)
+
+	// RefreshAccessToken refreshes an access token using a refresh token.
+	RefreshAccessToken(refreshToken string) (*string, error)
+
+	// ExtractClaims extracts claims from a token without validation.
+	ExtractClaims(tokenString string) (*Claims, error)
+}
+
+// client implements jwt.Client interface.
+type client struct {
+	// Config provides JWT configuration.
+	Config Config
 }
 
 // Config represents configuration for JWT.
 type Config struct {
 	// Issuer is issuer of JWT.
-	Issuer *string `json:"issuer"`
+	Issuer string `env:"ISSUER" envDefault:"boilerplate" json:"issuer"`
 
 	// Audience is audience of JWT.
-	Audience *string `json:"audience"`
+	Audience string `env:"AUDIENCE" envDefault:"boilerplate_audience" json:"audience"`
 
 	// SecretKey is secret key of JWT.
-	SecretKey *string `json:"secret_key"`
+	SecretKey string `env:"SECRET_KEY" envDefault:"boilerplate_secret_key" json:"secret_key"`
 
 	// AccessTokenTTL is access token TTL of JWT.
-	AccessTokenTTL *time.Duration `json:"access_token_ttl"`
+	AccessTokenTTL time.Duration `env:"ACCESS_TOKEN_TTL" envDefault:"15m" json:"access_token_ttl"`
 
 	// RefreshTokenTTL is refresh token TTL of JWT.
-	RefreshTokenTTL *time.Duration `json:"refresh_token_ttl"`
-}
-
-const (
-	// defaultIssuer is default issuer of JWT.
-	defaultIssuer = "boilerplate"
-
-	// defaultAudience is default audience of JWT.
-	defaultAudience = "boilerplate_audience"
-
-	// defaultSecretKey is default secret key of JWT.
-	defaultSecretKey = "boilerplate_secret_key"
-
-	// defaultAccessTokenTTL is default access token TTL of JWT.
-	defaultAccessTokenTTL = 1 * time.Hour
-
-	// defaultRefreshTokenTTL is default refresh token TTL of JWT.
-	defaultRefreshTokenTTL = 24 * time.Hour
-)
-
-// SetDefault sets default values.
-func (c *Config) SetDefault() {
-	if c.Issuer == nil {
-		issuer := defaultIssuer
-		c.Issuer = &issuer
-	}
-
-	if c.Audience == nil {
-		audience := defaultAudience
-		c.Audience = &audience
-	}
-
-	if c.SecretKey == nil {
-		secretKey := defaultSecretKey
-		c.SecretKey = &secretKey
-	}
-
-	if c.AccessTokenTTL == nil {
-		accessTokenTTL := defaultAccessTokenTTL
-		c.AccessTokenTTL = &accessTokenTTL
-	}
-
-	if c.RefreshTokenTTL == nil {
-		refreshTokenTTL := defaultRefreshTokenTTL
-		c.RefreshTokenTTL = &refreshTokenTTL
-	}
+	RefreshTokenTTL time.Duration `env:"REFRESH_TOKEN_TTL" envDefault:"168h" json:"refresh_token_ttl"`
 }
 
 // Claims represents JWT claims.
@@ -104,42 +77,46 @@ type Claims struct {
 	// Role is role of JWT.
 	Role string `json:"role"`
 
-	// RegisteredClaims provides registered claims of JWT.
-	jwt.RegisteredClaims
+	// RegisteredClaims extends jwtPkg.RegisteredClaims.
+	jwtPkg.RegisteredClaims
 }
 
 // NewModule provides module for JWT.
 func NewModule() fx.Option {
 	return fx.Module("jwt",
-		fx.Provide(New),
+		// provide concrete type for constructor
+		fx.Provide(func(config Config) *client {
+			// create instance
+			instance := newInstance(config)
+
+			return instance
+		}),
+		// provide interface type for dependency injection
+		fx.Provide(fx.Annotate(
+			func(instance *client) Client {
+				return instance
+			},
+		)),
 	)
 }
 
-// New creates a new JWT instance.
-func New(config *Config) (*JWT, error) {
-	if config == nil {
-		config = &Config{}
-	}
-
-	config.SetDefault()
-
-	return &JWT{
-		config: config,
-	}, nil
+// newInstance creates a new JWT instance.
+func newInstance(config Config) *client {
+	return &client{Config: config}
 }
 
 // GenerateAccessToken generates an access token.
-func (j *JWT) GenerateAccessToken(userID, email, role string) (*string, error) {
-	return j.generateToken(userID, email, role, *j.config.AccessTokenTTL)
+func (c *client) GenerateAccessToken(userID, email, role string) (*string, error) {
+	return c.generateToken(userID, email, role, c.Config.AccessTokenTTL)
 }
 
 // GenerateRefreshToken generates a refresh token.
-func (j *JWT) GenerateRefreshToken(userID, email, role string) (*string, error) {
-	return j.generateToken(userID, email, role, *j.config.RefreshTokenTTL)
+func (c *client) GenerateRefreshToken(userID, email, role string) (*string, error) {
+	return c.generateToken(userID, email, role, c.Config.RefreshTokenTTL)
 }
 
 // generateToken generates a JWT token.
-func (j *JWT) generateToken(userID, email, role string, ttl time.Duration) (*string, error) {
+func (c *client) generateToken(userID, email, role string, ttl time.Duration) (*string, error) {
 	now := time.Now()
 
 	// set claims
@@ -147,21 +124,21 @@ func (j *JWT) generateToken(userID, email, role string, ttl time.Duration) (*str
 		UserID: userID,
 		Email:  email,
 		Role:   role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    *j.config.Issuer,
+		RegisteredClaims: jwtPkg.RegisteredClaims{
+			Issuer:    c.Config.Issuer,
 			Subject:   userID,
-			Audience:  jwt.ClaimStrings{*j.config.Audience},
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-			NotBefore: jwt.NewNumericDate(now),
-			IssuedAt:  jwt.NewNumericDate(now),
+			Audience:  jwtPkg.ClaimStrings{c.Config.Audience},
+			ExpiresAt: jwtPkg.NewNumericDate(now.Add(ttl)),
+			NotBefore: jwtPkg.NewNumericDate(now),
+			IssuedAt:  jwtPkg.NewNumericDate(now),
 		},
 	}
 
 	// create token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwtPkg.NewWithClaims(jwtPkg.SigningMethodHS256, claims)
 
 	// sign token
-	signedTokenStr, err := token.SignedString([]byte(*j.config.SecretKey))
+	signedTokenStr, err := token.SignedString([]byte(c.Config.SecretKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign token: %w", err)
 	}
@@ -170,23 +147,23 @@ func (j *JWT) generateToken(userID, email, role string, ttl time.Duration) (*str
 }
 
 // ValidateToken validates a JWT token and returns the claims.
-func (j *JWT) ValidateToken(tokenStr string) (*Claims, error) {
+func (c *client) ValidateToken(tokenStr string) (*Claims, error) {
 	// parse token
-	token, err := jwt.ParseWithClaims(
+	token, err := jwtPkg.ParseWithClaims(
 		tokenStr,
 		&Claims{},
-		func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		func(token *jwtPkg.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwtPkg.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("%w: %v", ErrUnexpectedSigningMethod, token.Header["alg"])
 			}
 
-			return []byte(*j.config.SecretKey), nil
+			return []byte(c.Config.SecretKey), nil
 		},
 	)
 	if err != nil {
 		// return error if token is expired
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, fmt.Errorf("%w: %w", ErrExpiredToken, err)
+		if errors.Is(err, jwtPkg.ErrTokenExpired) {
+			return nil, ErrExpiredToken
 		}
 
 		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
@@ -202,20 +179,20 @@ func (j *JWT) ValidateToken(tokenStr string) (*Claims, error) {
 }
 
 // RefreshAccessToken refreshes an access token using a refresh token.
-func (j *JWT) RefreshAccessToken(refreshToken string) (*string, error) {
+func (c *client) RefreshAccessToken(refreshToken string) (*string, error) {
 	// validate refresh token
-	claims, err := j.ValidateToken(refreshToken)
+	claims, err := c.ValidateToken(refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
-	return j.GenerateAccessToken(claims.UserID, claims.Email, claims.Role)
+	return c.GenerateAccessToken(claims.UserID, claims.Email, claims.Role)
 }
 
 // ExtractClaims extracts claims from a token without validation.
-func (j *JWT) ExtractClaims(tokenString string) (*Claims, error) {
+func (c *client) ExtractClaims(tokenStr string) (*Claims, error) {
 	// parse token
-	token, _, err := jwt.NewParser().ParseUnverified(tokenString, &Claims{})
+	token, _, err := jwtPkg.NewParser().ParseUnverified(tokenStr, &Claims{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
