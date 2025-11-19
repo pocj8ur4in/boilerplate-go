@@ -1,201 +1,183 @@
-// Package database provides database.
+// Package database provides database client.
 package database
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
-	"math"
+	"net/url"
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/fx"
-
-	"github.com/pocj8ur4in/boilerplate-go/internal/gen/db"
 )
 
-var (
-	// ErrMaxConnsExceedsLimit returned when max_conns exceeds int32 limit.
-	ErrMaxConnsExceedsLimit = errors.New("max_conns exceeds int32 limit")
+// Client defines the interface for database operations.
+type Client interface {
+	// Connect connects to the database.
+	Connect(ctx context.Context) error
 
-	// ErrMaxIdleExceedsLimit returned when max_idle exceeds int32 limit.
-	ErrMaxIdleExceedsLimit = errors.New("max_idle exceeds int32 limit")
-)
+	// GetPool returns the database connection pool.
+	GetPool() *pgxpool.Pool
 
-// DB represents database.
-type DB struct {
-	// DB provides database connection pool.
-	*sql.DB
+	// PingContext pings the database to verify connectivity.
+	PingContext(ctx context.Context) error
 
-	// Queries provides database queries.
-	Queries *db.Queries
+	// Close closes the database connection pool.
+	Close()
+}
+
+// client implements database.Client.
+type client struct {
+	// Config provides database configuration.
+	Config Config
+
+	// pool is the database connection pool.
+	pool *pgxpool.Pool
 }
 
 // Config represents configuration for database.
 type Config struct {
 	// Host is host of database.
-	Host *string `json:"host"`
+	Host string `env:"HOST" envDefault:"localhost" json:"host"`
 
 	// Port is port of database.
-	Port *int `json:"port"`
+	Port int `env:"PORT" envDefault:"5432" json:"port"`
 
 	// User is user of database.
-	User *string `json:"user"`
+	User string `env:"USER" envDefault:"boilerplate_user" json:"user"`
 
 	// Password is password of database.
-	Password *string `json:"password"`
+	Password string `env:"PASSWORD" envDefault:"boilerplate_password" json:"password"`
 
 	// DBName is name of database.
-	DBName *string `json:"db_name"`
+	DBName string `env:"DB_NAME" envDefault:"boilerplate" json:"db_name"`
 
 	// SSLMode is SSL mode of database.
-	SSLMode *bool `json:"ssl_mode"`
+	SSLMode bool `env:"SSL_MODE" envDefault:"false" json:"ssl_mode"`
 
 	// MaxConns is maximum number of connections to database.
-	MaxConns *int `json:"max_conns"`
+	MaxConns int32 `env:"MAX_CONNS" envDefault:"10" json:"max_conns"`
 
 	// MaxIdle is maximum number of idle connections to database.
-	MaxIdle *int `json:"max_idle"`
-}
-
-const (
-	// defaultHost is default host of database.
-	defaultHost = "localhost"
-
-	// defaultPort is default port of database.
-	defaultPort = 5432
-
-	// defaultUser is default user of database.
-	defaultUser = "boilerplate_user"
-
-	// defaultPassword is default password of database.
-	defaultPassword = "boilerplate_password"
-
-	// defaultDBName is default name of database.
-	defaultDBName = "boilerplate"
-
-	// defaultSSLMode is default SSL mode of database.
-	defaultSSLMode = false
-
-	// defaultMaxConns is default maximum number of connections to database.
-	defaultMaxConns = 10
-
-	// defaultMaxIdle is default maximum number of idle connections to database.
-	defaultMaxIdle = 5
-)
-
-// SetDefault sets default values.
-func (c *Config) SetDefault() {
-	if c.Host == nil {
-		host := defaultHost
-		c.Host = &host
-	}
-
-	if c.Port == nil {
-		port := defaultPort
-		c.Port = &port
-	}
-
-	if c.User == nil {
-		user := defaultUser
-		c.User = &user
-	}
-
-	if c.Password == nil {
-		password := defaultPassword
-		c.Password = &password
-	}
-
-	if c.DBName == nil {
-		dbName := defaultDBName
-		c.DBName = &dbName
-	}
-
-	if c.SSLMode == nil {
-		sslMode := defaultSSLMode
-		c.SSLMode = &sslMode
-	}
-
-	if c.MaxConns == nil {
-		maxConns := defaultMaxConns
-		c.MaxConns = &maxConns
-	}
-
-	if c.MaxIdle == nil {
-		maxIdle := defaultMaxIdle
-		c.MaxIdle = &maxIdle
-	}
+	MaxIdle int32 `env:"MAX_IDLE" envDefault:"5" json:"max_idle"`
 }
 
 // NewModule provides module for database.
 func NewModule() fx.Option {
 	return fx.Module("database",
-		fx.Provide(New),
+		// provide concrete type for constructor
+		fx.Provide(func(config Config) (*client, error) {
+			// create instance
+			instance := newInstance(config)
+
+			return instance, nil
+		}),
+		// provide interface type for dependency injection
+		fx.Provide(fx.Annotate(
+			func(instance *client) Client {
+				return instance
+			},
+		)),
+		// register lifecycle hooks
+		fx.Invoke(func(lifecycle fx.Lifecycle, client Client) {
+			lifecycle.Append(fx.Hook{
+				OnStart: func(ctx context.Context) error {
+					// connect to database
+					if err := client.Connect(ctx); err != nil {
+						return fmt.Errorf("failed to setup database module: %w", err)
+					}
+
+					// ping to verify connectivity
+					return client.PingContext(ctx)
+				},
+				OnStop: func(_ context.Context) error {
+					client.Close()
+
+					return nil
+				},
+			})
+		}),
 	)
 }
 
-// New creates new database instance.
-func New(config *Config) (*DB, error) {
-	ctx := context.Background()
+// newInstance creates new database instance.
+func newInstance(config Config) *client {
+	return &client{Config: config}
+}
 
-	// set default
-	if config == nil {
-		config = &Config{}
-	}
-
-	config.SetDefault()
-
-	// build database connection string
-	sslmodeStr := "disable"
-	if *config.SSLMode {
-		sslmodeStr = "require"
-	}
-
-	connString := "host=" + *config.Host + " port=" + strconv.Itoa(*config.Port) +
-		" user=" + *config.User + " password=" + *config.Password + " dbname=" + *config.DBName +
-		" sslmode=" + sslmodeStr
-
+// Connect connects to the database.
+func (c *client) Connect(ctx context.Context) error {
 	// parse database connection pool config
-	poolConfig, err := pgxpool.ParseConfig(connString)
+	poolConfig, err := pgxpool.ParseConfig(c.buildConnStr())
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse pool config: %w", err)
+		return fmt.Errorf("failed to parse pool config: %w", err)
 	}
 
-	// set database connection pool config, no need to validate on security scan
-	if *config.MaxConns > math.MaxInt32 {
-		return nil, fmt.Errorf("%w: %d", ErrMaxConnsExceedsLimit, *config.MaxConns)
-	}
-
-	if *config.MaxIdle > math.MaxInt32 {
-		return nil, fmt.Errorf("%w: %d", ErrMaxIdleExceedsLimit, *config.MaxIdle)
-	}
-
-	// #nosec G115 -- validated above
-	poolConfig.MaxConns = int32(*config.MaxConns)
-	// #nosec G115 -- validated above
-	poolConfig.MinConns = int32(*config.MaxIdle)
+	// set pool configuration
+	poolConfig.MaxConns = c.Config.MaxConns
+	poolConfig.MinConns = c.Config.MaxIdle
 
 	// create database connection pool
-	connPool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+	connPool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create database connection pool: %w", err)
+		return fmt.Errorf("failed to create database connection pool: %w", err)
 	}
 
-	// open database connection pool wrapper
-	sqlDB := stdlib.OpenDBFromPool(connPool)
+	c.pool = connPool
 
-	// ping database connection
-	if err := sqlDB.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	return nil
+}
+
+// buildConnStr builds connection string.
+func (c *client) buildConnStr() string {
+	// build URL
+	connURL := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.Config.User, c.Config.Password),
+		Host:   c.buildHostPortStr(),
+		Path:   "/" + c.Config.DBName,
 	}
 
-	// create queries using database connection pool
-	queries := db.New(connPool)
+	// add SSL mode as query parameter
+	query := connURL.Query()
+	if c.Config.SSLMode {
+		query.Set("sslmode", "require")
+	} else {
+		query.Set("sslmode", "disable")
+	}
 
-	return &DB{
-		DB:      sqlDB,
-		Queries: queries,
-	}, nil
+	// set raw query to URL
+	connURL.RawQuery = query.Encode()
+
+	return connURL.String()
+}
+
+// buildHostPort builds string of {host:port}.
+func (c *client) buildHostPortStr() string {
+	if c.Config.Port == 0 {
+		return c.Config.Host
+	}
+
+	return c.Config.Host + ":" + strconv.Itoa(c.Config.Port)
+}
+
+// GetPool returns the database connection pool.
+func (c *client) GetPool() *pgxpool.Pool {
+	return c.pool
+}
+
+// PingContext pings the database.
+func (c *client) PingContext(ctx context.Context) error {
+	if err := c.pool.Ping(ctx); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	return nil
+}
+
+// Close closes the database connection pool.
+func (c *client) Close() {
+	if c.pool != nil {
+		c.pool.Close()
+	}
 }
