@@ -1,6 +1,7 @@
 {
   "logger": {
-    "level": "debug"
+    "level": "debug",
+    "format": "console"
   },
   "database": {
     "host": "localhost",

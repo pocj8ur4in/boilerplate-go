@@ -6,7 +6,7 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/pocj8ur4in/boilerplate-go)](https://github.com/pocj8ur4in/boilerplate-go)
 [![License](https://img.shields.io/github/license/pocj8ur4in/boilerplate-go)](https://github.com/pocj8ur4in/boilerplate-go/blob/main/LICENSE)
 
-boilerplate code for http api server on go with stdlib, [chi](https://github.com/go-chi/chi), [pgx](https://github.com/jackc/pgx), [go-redis](https://github.com/redis/go-redis), [zerolog](https://github.com/rs/zerolog), [oapi-codegen](https://github.com/deepmap/oapi-codegen), [fx](https://github.com/uber-go/fx), and [sqlc](https://github.com/sqlc-dev/sqlc)
+boilerplate code for http api server on go with stdlib, [chi](https://github.com/go-chi/chi), [pgx](https://github.com/jackc/pgx), [go-redis](https://github.com/redis/go-redis), [log/slog](https://pkg.go.dev/log/slog), [oapi-codegen](https://github.com/deepmap/oapi-codegen), [fx](https://github.com/uber-go/fx), and [sqlc](https://github.com/sqlc-dev/sqlc)
 
 ## How to install
 
