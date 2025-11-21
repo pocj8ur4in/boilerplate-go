@@ -1,119 +1,116 @@
-// Package redis provides redis.
+// Package redis provides redis client.
 package redis
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/redis/go-redis/v9"
+	redisPkg "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 )
 
-// Redis represents redis.
-type Redis struct {
-	// UniversalClient provides redis universal client.
-	redis.UniversalClient
+// Client defines the interface for redis operations.
+type Client interface {
+	// Connect connects to the redis.
+	Connect(ctx context.Context) error
+
+	// UniversalClient extends redisPkg.UniversalClient.
+	redisPkg.UniversalClient
+}
+
+// client implements redis.Client interface.
+type client struct {
+	// Config provides redis configuration.
+	Config Config
+
+	// UniversalClient extends redisPkg.UniversalClient.
+	redisPkg.UniversalClient
 }
 
 // Config represents configuration for redis.
 type Config struct {
 	// Addrs is addresses of redis servers.
-	Addrs []string `json:"addrs"`
+	Addrs []string `env:"ADDRESSES" envDefault:"localhost:6379" json:"addrs"`
 
 	// Password is password of redis.
-	Password *string `json:"password"`
+	Password string `env:"PASSWORD" envDefault:"boilerplate_password" json:"password"`
 
 	// DB is db of redis.
-	DB *int `json:"db"`
+	DB int `env:"DB" envDefault:"0" json:"db"`
 
 	// MasterName is master name for sentinel mode.
-	MasterName *string `json:"master_name"`
+	MasterName string `env:"MASTER_NAME" envDefault:"" json:"master_name"`
 
 	// SentinelAddrs is sentinel addresses.
-	SentinelAddrs []string `json:"sentinel_addrs"`
-}
-
-const (
-	// defaultAddr is default addr of redis.
-	defaultAddr = "localhost:6379"
-
-	// defaultPassword is default password of redis.
-	defaultPassword = "boilerplate_password"
-
-	// defaultDB is default DB of redis.
-	defaultDB = 0
-
-	// defaultMasterName is default master name of redis.
-	defaultMasterName = ""
-)
-
-// SetDefault sets default values.
-func (c *Config) SetDefault() {
-	if c.Addrs == nil {
-		c.Addrs = []string{defaultAddr}
-	}
-
-	if c.Password == nil {
-		password := defaultPassword
-		c.Password = &password
-	}
-
-	if c.DB == nil {
-		db := defaultDB
-		c.DB = &db
-	}
-
-	if c.MasterName == nil {
-		masterName := defaultMasterName
-		c.MasterName = &masterName
-	}
-
-	if c.SentinelAddrs == nil {
-		c.SentinelAddrs = []string{}
-	}
+	SentinelAddrs []string `env:"SENTINEL_ADDRESSES" envDefault:"" json:"sentinel_addrs"`
 }
 
 // NewModule provides module for redis.
 func NewModule() fx.Option {
 	return fx.Module("redis",
-		fx.Provide(New),
+		// provide concrete type for constructor
+		fx.Provide(func(config Config) *client {
+			// create instance
+			instance := newInstance(config)
+
+			return instance
+		}),
+		// provide interface type for dependency injection
+		fx.Provide(fx.Annotate(
+			func(instance *client) Client {
+				return instance
+			},
+		)),
+		// register lifecycle hooks
+		fx.Invoke(func(lifecycle fx.Lifecycle, client Client) {
+			lifecycle.Append(fx.Hook{
+				OnStart: func(ctx context.Context) error {
+					// connect to redis
+					if err := client.Connect(ctx); err != nil {
+						return fmt.Errorf("failed to setup redis module: %w", err)
+					}
+
+					// ping to verify connectivity
+					if err := client.Ping(ctx).Err(); err != nil {
+						return fmt.Errorf("failed to ping redis: %w", err)
+					}
+
+					return nil
+				},
+				OnStop: func(_ context.Context) error {
+					return client.Close()
+				},
+			})
+		}),
 	)
 }
 
-// New creates new redis instance.
-func New(config *Config) (*Redis, error) {
-	ctx := context.Background()
+// newInstance creates new redis instance.
+func newInstance(config Config) *client {
+	return &client{Config: config}
+}
 
-	if config == nil {
-		config = &Config{}
-	}
-
-	config.SetDefault()
-
+// Connect connects to the redis.
+func (c *client) Connect(_ context.Context) error {
 	// create universal client options
-	options := &redis.UniversalOptions{
-		Addrs:    config.Addrs,
-		Password: *config.Password,
-		DB:       *config.DB,
+	options := &redisPkg.UniversalOptions{
+		Addrs:    c.Config.Addrs,
+		Password: c.Config.Password,
+		DB:       c.Config.DB,
 	}
 
-	if *config.MasterName != "" {
-		options.MasterName = *config.MasterName
+	// set master name on options
+	if c.Config.MasterName != "" {
+		options.MasterName = c.Config.MasterName
 	}
 
-	if len(config.SentinelAddrs) > 0 {
-		options.Addrs = config.SentinelAddrs
+	// add sentinel addresses to options
+	if len(c.Config.SentinelAddrs) > 0 {
+		options.Addrs = append(options.Addrs, c.Config.SentinelAddrs...)
 	}
 
 	// create universal client
-	redisClient := redis.NewUniversalClient(options)
+	c.UniversalClient = redisPkg.NewUniversalClient(options)
 
-	// ping redis connection
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to ping redis: %w", err)
-	}
-
-	return &Redis{
-		UniversalClient: redisClient,
-	}, nil
+	return nil
 }
