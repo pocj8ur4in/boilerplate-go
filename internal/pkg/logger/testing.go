@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	// TestLevel is the test level of logger.
-	TestLevel = "debug"
+	// TestLoggerLevel is the test level of logger.
+	TestLoggerLevel = "debug"
 
-	// TestFormat is the test format of logger.
-	TestFormat = "json"
+	// TestLoggerFormat is the test format of logger.
+	TestLoggerFormat = "json"
 )
 
 // TestOption modifies config for testing.
@@ -39,8 +39,8 @@ func InitForTest(t *testing.T, opts ...TestOption) *client {
 
 	// set config
 	config := Config{
-		Level:  TestLevel,
-		Format: TestFormat,
+		Level:  TestLoggerLevel,
+		Format: TestLoggerFormat,
 	}
 
 	// apply custom options

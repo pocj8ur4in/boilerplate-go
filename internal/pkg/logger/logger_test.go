@@ -18,7 +18,7 @@ func TestInit(t *testing.T) {
 		log := InitForTest(t)
 		require.NotNil(t, log)
 		assert.NotNil(t, log.Logger)
-		require.Equal(t, TestLevel, log.Config.Level)
+		require.Equal(t, TestLoggerLevel, log.Config.Level)
 	})
 }
 
@@ -43,7 +43,7 @@ func TestInitWithError(t *testing.T) {
 		t.Parallel()
 
 		config := Config{
-			Level:  TestLevel,
+			Level:  TestLoggerLevel,
 			Format: "invalid",
 		}
 
@@ -58,7 +58,7 @@ func TestInitWithError(t *testing.T) {
 		t.Parallel()
 
 		config := Config{
-			Level: TestLevel,
+			Level: TestLoggerLevel,
 		}
 
 		instance := newInstance(config)
@@ -140,13 +140,13 @@ func TestNewInstanceAndSetup(t *testing.T) {
 		t.Parallel()
 
 		config := Config{
-			Level:  TestLevel,
-			Format: TestFormat,
+			Level:  TestLoggerLevel,
+			Format: TestLoggerFormat,
 		}
 
 		instance := newInstance(config)
 		require.NotNil(t, instance)
-		require.Equal(t, TestLevel, instance.Config.Level)
+		require.Equal(t, TestLoggerLevel, instance.Config.Level)
 
 		err := instance.setup()
 		require.NoError(t, err)
@@ -344,5 +344,20 @@ func TestCtx(t *testing.T) {
 
 		require.NotNil(t, defaultLog)
 		assert.Equal(t, &log.Logger, defaultLog)
+	})
+}
+
+func TestLevel(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return log level", func(t *testing.T) {
+		t.Parallel()
+
+		log := InitForTest(t)
+		require.NotNil(t, log)
+
+		level := log.Level()
+
+		assert.NotNil(t, level)
 	})
 }

@@ -40,6 +40,9 @@ type Client interface {
 
 	// Ctx returns a logger from context.
 	Ctx(ctx context.Context) *slog.Logger
+
+	// Level returns the level of the logger.
+	Level() slog.Level
 }
 
 // client implements logger.Client interface.
@@ -49,6 +52,9 @@ type client struct {
 
 	// Logger extends slog.Logger.
 	slog.Logger
+
+	// level holds the level of the logger.
+	level slog.Level
 }
 
 // Config represents configuration for logger.
@@ -92,16 +98,15 @@ func newInstance(config Config) *client {
 // setup sets up the logger instance.
 func (c *client) setup() error {
 	// parse level
-	var level slog.Level
 	switch c.Config.Level {
 	case "debug", "DEBUG", "Debug":
-		level = slog.LevelDebug
+		c.level = slog.LevelDebug
 	case "info", "INFO", "Info":
-		level = slog.LevelInfo
+		c.level = slog.LevelInfo
 	case "warn", "WARN", "Warn":
-		level = slog.LevelWarn
+		c.level = slog.LevelWarn
 	case "error", "ERROR", "Error":
-		level = slog.LevelError
+		c.level = slog.LevelError
 	default:
 		return fmt.Errorf("failed to parse log level: %w: %q", ErrInvalidLogLevel, c.Config.Level)
 	}
@@ -112,12 +117,12 @@ func (c *client) setup() error {
 	switch c.Config.Format {
 	case "console", "text":
 		handler = tint.NewHandler(os.Stdout, &tint.Options{
-			Level:      level,
+			Level:      c.level,
 			TimeFormat: time.RFC3339Nano,
 		})
 	case "json":
 		options := &slog.HandlerOptions{
-			Level: level,
+			Level: c.level,
 			ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
 				// format time as RFC3339Nano
 				if attr.Key == slog.TimeKey {
@@ -183,4 +188,9 @@ func WithContext(ctx context.Context, logger *slog.Logger) context.Context {
 // loggerKey returns the key used to store logger in context.
 func loggerKey() *struct{} {
 	return &struct{}{}
+}
+
+// Level returns the level of the logger.
+func (c *client) Level() slog.Level {
+	return c.level
 }
