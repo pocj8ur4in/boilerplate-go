@@ -16,7 +16,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server/middleware"
-	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
+	genDB "github.com/pocj8ur4in/boilerplate-go/internal/gen/db"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
@@ -27,408 +29,313 @@ var (
 	ErrServerNotInitialized = errors.New("http server is not initialized")
 )
 
-// Server represents server.
-type Server struct {
-	// config provides server configuration.
-	config *Config
+// Client defines the interface for server operations.
+type Client interface {
+	// Run runs the HTTP server.
+	Run() error
 
-	// logger provides logger.
-	logger *logger.Logger
+	// Shutdown gracefully shuts down the HTTP server.
+	Shutdown(ctx context.Context) error
+}
 
-	// httpServer provides HTTP server.
+// client implements server.Client.
+type client struct {
+	// Config provides server configuration.
+	Config Config
+
+	// log provides logger.
+	log logger.Client
+
+	// httpServer provides http server.
 	httpServer *http.Server
 
-	// registry provides Prometheus registry for metrics.
+	// queries provides database queries client.
+	queries *genDB.Queries
+
+	// registry provides prometheus registry for metrics.
 	registry *prometheus.Registry
 }
 
 // Config represents configuration for server.
 type Config struct {
 	// Host is host of server.
-	Host *string `json:"host"`
+	Host string `env:"HOST" envDefault:"localhost" json:"host"`
 
 	// Port is port of server.
-	Port *int `json:"port"`
+	Port int `env:"PORT" envDefault:"8080" json:"port"`
 
 	// ReadTimeout is read timeout of server.
-	ReadTimeout *int `json:"read_timeout"`
+	ReadTimeout time.Duration `env:"READ_TIMEOUT" envDefault:"10s" json:"read_timeout"`
 
 	// WriteTimeout is write timeout of server.
-	WriteTimeout *int `json:"write_timeout"`
+	WriteTimeout time.Duration `env:"WRITE_TIMEOUT" envDefault:"10s" json:"write_timeout"`
 
 	// IdleTimeout is idle timeout of server.
-	IdleTimeout *int `json:"idle_timeout"`
+	IdleTimeout time.Duration `env:"IDLE_TIMEOUT" envDefault:"10s" json:"idle_timeout"`
 
 	// ShutdownTimeout is shutdown timeout of server.
-	ShutdownTimeout *int `json:"shutdown_timeout"`
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"10s" json:"shutdown_timeout"`
 
 	// MaxRequestSize is maximum request size in bytes.
-	MaxRequestSize *int64 `json:"max_request_size"`
+	MaxRequestSize int64 `env:"MAX_REQUEST_SIZE" envDefault:"10485760" json:"max_request_size"`
 
 	// Compression is compression configuration of server.
-	Compression *CompressionConfig `json:"compression"`
+	Compression CompressionConfig `envPrefix:"COMPRESSION_" json:"compression"`
 
 	// CORS is CORS of server.
-	CORS *CORSConfig `json:"cors"`
+	CORS CORSConfig `envPrefix:"CORS_" json:"cors"`
 
 	// RateLimit is rate limit of server.
-	RateLimit *middleware.RateLimitConfig `json:"rate_limit"`
+	RateLimit middleware.RateLimitConfig `envPrefix:"RATE_LIMIT_" json:"rate_limit"`
 
 	// Metrics is metrics configuration of server.
-	Metrics *middleware.MetricsConfig `json:"metrics"`
+	Metrics middleware.MetricsConfig `envPrefix:"METRICS_" json:"metrics"`
+
+	// RequestThrottle is request throttling configuration of server.
+	RequestThrottle middleware.ThrottleConfig `envPrefix:"REQUEST_THROTTLE_" json:"request_throttle"`
 }
 
 // CompressionConfig represents configuration for compression.
 type CompressionConfig struct {
 	// Level is compression level (1-9).
-	Level *int `json:"level"`
+	Level int `env:"LEVEL" envDefault:"6" json:"level"`
 
 	// Format is compression format (gzip, deflate, br).
-	Format *string `json:"format"`
+	Format string `env:"FORMAT" envDefault:"gzip" json:"format"`
 
 	// Enabled is whether compression is enabled.
-	Enabled *bool `json:"enabled"`
+	Enabled bool `env:"ENABLED" envDefault:"true" json:"enabled"`
 }
 
 // CORSConfig represents configuration for CORS.
 type CORSConfig struct {
-	// AllowedOrigins is allowed origins of CORS.
-	AllowedOrigins *[]string `json:"allowed_origins"`
+	// AllowedOrigins is allowed origins on CORS.
+	AllowedOrigins []string `env:"ALLOWED_ORIGINS" envDefault:"*" json:"allowed_origins"`
 
-	// AllowedMethods is allowed methods of CORS.
-	AllowedMethods *[]string `json:"allowed_methods"`
+	// AllowedMethods is allowed methods on CORS.
+	AllowedMethods []string `env:"ALLOWED_METHODS" envDefault:"GET,POST,PUT,PATCH,DELETE,OPTIONS" json:"allowed_methods"`
 
-	// AllowedHeaders is allowed headers of CORS.
-	AllowedHeaders *[]string `json:"allowed_headers"`
+	// AllowedHeaders is allowed headers on CORS.
+	AllowedHeaders []string `env:"ALLOWED_HEADERS" envDefault:"Accept,Authorization,Content-Type,X-CSRF-Token" json:"allowed_headers"` //nolint:lll // line length needed for struct tag
+
+	// MaxAge is max age on CORS.
+	MaxAge int `env:"MAX_AGE" envDefault:"300" json:"max_age"`
 }
 
-// SetDefault sets default values.
-func (c *Config) SetDefault() {
-	c.setServerDefault()
-	c.setCompressionDefault()
-	c.setCORSDefault()
-	c.setRateLimitDefault()
-	c.setMetricsDefault()
-}
+// ConstructorParams represents parameters for constructor.
+type ConstructorParams struct {
+	fx.In
 
-// setServerDefault sets default values for server.
-func (c *Config) setServerDefault() {
-	if c.Host == nil {
-		c.Host = &[]string{"localhost"}[0]
-	}
+	// Config provides server configuration.
+	Config Config
 
-	if c.Port == nil {
-		c.Port = &[]int{8080}[0]
-	}
+	// log provides logger client.
+	Log logger.Client
 
-	if c.ReadTimeout == nil {
-		c.ReadTimeout = &[]int{10}[0]
-	}
+	// DB provides database client.
+	DB database.Client
 
-	if c.WriteTimeout == nil {
-		c.WriteTimeout = &[]int{10}[0]
-	}
+	// JWT provides JWT client.
+	JWT jwt.Client
 
-	if c.IdleTimeout == nil {
-		c.IdleTimeout = &[]int{10}[0]
-	}
+	// Redis provides redis client.
+	Redis redis.Client
 
-	if c.ShutdownTimeout == nil {
-		c.ShutdownTimeout = &[]int{10}[0]
-	}
-
-	if c.MaxRequestSize == nil {
-		c.MaxRequestSize = &[]int64{10485760}[0] // 10MB
-	}
-}
-
-// setCompressionDefault sets default values for compression on server.
-func (c *Config) setCompressionDefault() {
-	if c.Compression == nil {
-		c.Compression = &CompressionConfig{}
-	}
-
-	if c.Compression.Level == nil {
-		c.Compression.Level = &[]int{6}[0]
-	}
-
-	if c.Compression.Format == nil {
-		c.Compression.Format = &[]string{"gzip"}[0]
-	}
-
-	if c.Compression.Enabled == nil {
-		c.Compression.Enabled = &[]bool{true}[0]
-	}
-}
-
-// setCORSDefault sets default values for CORS on server.
-func (c *Config) setCORSDefault() {
-	if c.CORS == nil {
-		c.CORS = &CORSConfig{}
-	}
-
-	if c.CORS.AllowedOrigins == nil {
-		c.CORS.AllowedOrigins = &[]string{"*"}
-	}
-
-	if c.CORS.AllowedMethods == nil {
-		c.CORS.AllowedMethods = &[]string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
-	}
-
-	if c.CORS.AllowedHeaders == nil {
-		c.CORS.AllowedHeaders = &[]string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"}
-	}
-}
-
-// setRateLimitDefault sets default values for rate limit on server.
-func (c *Config) setRateLimitDefault() {
-	if c.RateLimit == nil {
-		c.RateLimit = &middleware.RateLimitConfig{}
-	}
-
-	c.setGlobalRateLimitDefault()
-	c.setIPRateLimitDefault()
-	c.setEndpointRateLimitDefault()
-}
-
-// setGlobalRateLimitDefault sets default values for global rate limit.
-func (c *Config) setGlobalRateLimitDefault() {
-	if c.RateLimit.Global == nil {
-		c.RateLimit.Global = &middleware.RateLimitTypeConfig{}
-	}
-
-	if c.RateLimit.Global.Enabled == nil {
-		c.RateLimit.Global.Enabled = &[]bool{false}[0]
-	}
-
-	if c.RateLimit.Global.Requests == nil {
-		c.RateLimit.Global.Requests = &[]int{1000}[0]
-	}
-
-	if c.RateLimit.Global.Window == nil {
-		c.RateLimit.Global.Window = &[]int{60}[0]
-	}
-}
-
-// setIPRateLimitDefault sets default values for IP rate limit.
-func (c *Config) setIPRateLimitDefault() {
-	if c.RateLimit.IP == nil {
-		c.RateLimit.IP = &middleware.RateLimitTypeConfig{}
-	}
-
-	if c.RateLimit.IP.Enabled == nil {
-		c.RateLimit.IP.Enabled = &[]bool{true}[0]
-	}
-
-	if c.RateLimit.IP.Requests == nil {
-		c.RateLimit.IP.Requests = &[]int{100}[0]
-	}
-
-	if c.RateLimit.IP.Window == nil {
-		c.RateLimit.IP.Window = &[]int{60}[0]
-	}
-}
-
-// setEndpointRateLimitDefault sets default values for endpoint rate limit.
-func (c *Config) setEndpointRateLimitDefault() {
-	if c.RateLimit.Endpoint == nil {
-		c.RateLimit.Endpoint = &middleware.RateLimitTypeConfig{}
-	}
-
-	if c.RateLimit.Endpoint.Enabled == nil {
-		c.RateLimit.Endpoint.Enabled = &[]bool{false}[0]
-	}
-
-	if c.RateLimit.Endpoint.Requests == nil {
-		c.RateLimit.Endpoint.Requests = &[]int{50}[0]
-	}
-
-	if c.RateLimit.Endpoint.Window == nil {
-		c.RateLimit.Endpoint.Window = &[]int{60}[0]
-	}
-}
-
-// setMetricsDefault sets default values for metrics.
-func (c *Config) setMetricsDefault() {
-	if c.Metrics == nil {
-		c.Metrics = &middleware.MetricsConfig{}
-	}
-
-	if c.Metrics.Enabled == nil {
-		c.Metrics.Enabled = &[]bool{true}[0]
-	}
-
-	if c.Metrics.Path == nil {
-		c.Metrics.Path = &[]string{"/metrics"}[0]
-	}
-
-	if c.Metrics.ExcludePaths == nil {
-		c.Metrics.ExcludePaths = []string{"/health", "/status"}
-	}
-
-	c.Metrics.SetDefault()
+	// Handler provides API handler.
+	Handler genAPI.ServerInterface
 }
 
 // NewModule provides module for server.
 func NewModule() fx.Option {
 	return fx.Module("server",
-		fx.Provide(New),
+		// provide concrete type for constructor
+		fx.Provide(func(params ConstructorParams) (*client, error) {
+			// create instance
+			instance := newInstance(params.Config)
+
+			// setup instance
+			instance.setup(params.Handler, params.Log, params.DB, params.JWT, params.Redis)
+
+			return instance, nil
+		}),
+		// provide interface type for dependency injection
+		fx.Provide(fx.Annotate(
+			func(instance *client) Client {
+				return instance
+			},
+		)),
 	)
 }
 
-// New create new server instance.
-func New(
-	config *Config,
-	logger *logger.Logger,
-	apiHandler api.ServerInterface,
-	jwtService *jwt.JWT,
-	redis *redis.Redis,
-) (*Server, error) {
-	// set default
-	if config == nil {
-		config = &Config{}
-	}
+// newInstance creates new server instance.
+func newInstance(config Config) *client {
+	return &client{Config: config}
+}
 
-	config.SetDefault()
-
-	// create server
-	server := &Server{
-		config:   config,
-		logger:   logger,
-		registry: prometheus.NewRegistry(),
-	}
+// Setup sets up the server with dependencies.
+func (c *client) setup(
+	apiHandler genAPI.ServerInterface,
+	log logger.Client,
+	db database.Client,
+	jwt jwt.Client,
+	redis redis.Client,
+) {
+	// inject outer dependencies
+	c.log = log
+	c.queries = genDB.New(db.GetPool())
+	c.registry = prometheus.NewRegistry()
 
 	// setup router and handlers
-	router := server.setupRouter(config, logger, redis)
-	httpHandler := server.setupAPIHandler(apiHandler, router, jwtService, logger)
-	server.httpServer = server.createHTTPServer(config, httpHandler)
-
-	return server, nil
+	router := c.setupRouter(c.Config, log, jwt, redis)
+	httpHandler := c.setupAPIHandler(apiHandler, router)
+	c.httpServer = c.createHTTPServer(c.Config, httpHandler)
 }
 
 // setupRouter sets up the router.
-func (s *Server) setupRouter(config *Config, logger *logger.Logger, redis *redis.Redis) *chi.Mux {
+func (c *client) setupRouter(config Config, log logger.Client, jwt jwt.Client, redis redis.Client) *chi.Mux {
 	router := chi.NewRouter()
 
-	s.setupBasicMiddlewares(router, config)
-	s.setupRateLimitMiddlewares(router, config, redis, logger)
-	s.setupCORS(router, config)
-	s.setupMetricsEndpoint(router, config)
+	c.setupBasicMiddlewares(config, log, jwt, router)
+	c.setupRateLimitMiddlewares(config, log, redis, router)
+	c.setupRequestThrottleMiddlewares(config, log, redis, router)
+	c.setupCORS(config, router)
+	c.setupMetricsEndpoint(config, router)
 
 	return router
 }
 
 // setupBasicMiddlewares sets up basic middlewares.
-func (s *Server) setupBasicMiddlewares(router *chi.Mux, config *Config) {
+func (c *client) setupBasicMiddlewares(config Config, log logger.Client, jwt jwt.Client, router *chi.Mux) {
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.SecurityHeaders())
-	router.Use(middleware.RequestSize(*config.MaxRequestSize))
+	router.Use(middleware.RequestSize(config.MaxRequestSize))
 
-	if *config.Compression.Enabled {
-		router.Use(middleware.Compress(*config.Compression.Level, *config.Compression.Format))
+	if config.Compression.Enabled {
+		router.Use(middleware.Compress(config.Compression.Level, config.Compression.Format))
 	}
 
-	if *config.Metrics.Enabled {
-		router.Use(middleware.Metrics(config.Metrics, s.registry))
+	if config.Metrics.Enabled {
+		router.Use(middleware.Metrics(config.Metrics, c.registry))
 	}
 
-	router.Use(middleware.LogRequest(s.logger))
-	router.Use(middleware.Timeout(time.Duration(*config.ReadTimeout) * time.Second))
+	router.Use(middleware.InjectLogger(c.log))
+	router.Use(middleware.LogRequest(c.log))
+	router.Use(middleware.Timeout(config.ReadTimeout))
+
+	router.Use(middleware.JwtAuth(log, jwt))
 }
 
 // setupRateLimitMiddlewares sets up rate limit middlewares.
-func (s *Server) setupRateLimitMiddlewares(router *chi.Mux, config *Config, redis *redis.Redis, logger *logger.Logger) {
-	if *config.RateLimit.Global.Enabled {
+func (c *client) setupRateLimitMiddlewares(
+	config Config,
+	log logger.Client,
+	redis redis.Client,
+	router *chi.Mux,
+) {
+	if config.RateLimit.Global.Enabled {
+		window := time.Duration(config.RateLimit.Global.Window) * time.Second
+
 		router.Use(middleware.GlobalRateLimit(
-			*config.RateLimit.Global.Requests,
-			time.Duration(*config.RateLimit.Global.Window)*time.Second,
+			config.RateLimit.Global.Requests,
+			window,
+			log,
 			redis,
-			logger,
 		))
 	}
 
-	if *config.RateLimit.IP.Enabled {
+	if config.RateLimit.IP.Enabled {
+		window := time.Duration(config.RateLimit.IP.Window) * time.Second
+
 		router.Use(middleware.IPRateLimit(
-			*config.RateLimit.IP.Requests,
-			time.Duration(*config.RateLimit.IP.Window)*time.Second,
+			config.RateLimit.IP.Requests,
+			window,
+			log,
 			redis,
-			logger,
 		))
 	}
 
-	if *config.RateLimit.Endpoint.Enabled {
+	if config.RateLimit.Endpoint.Enabled {
+		window := time.Duration(config.RateLimit.Endpoint.Window) * time.Second
+
 		router.Use(middleware.EndpointRateLimit(
-			*config.RateLimit.Endpoint.Requests,
-			time.Duration(*config.RateLimit.Endpoint.Window)*time.Second,
+			config.RateLimit.Endpoint.Requests,
+			window,
+			log,
 			redis,
-			logger,
+		))
+	}
+}
+
+// setupRequestThrottleMiddlewares sets up request throttling middlewares.
+func (c *client) setupRequestThrottleMiddlewares(
+	config Config,
+	log logger.Client,
+	redis redis.Client,
+	router *chi.Mux,
+) {
+	if config.RequestThrottle.MaxConcurrent > 0 {
+		router.Use(middleware.GlobalRequestThrottle(
+			config.RequestThrottle,
+			log,
+			redis,
 		))
 	}
 }
 
 // setupCORS sets up CORS handler on router.
-func (s *Server) setupCORS(router *chi.Mux, config *Config) {
-	const corsMaxAge = 300 // 5 minutes
-
+func (c *client) setupCORS(config Config, router *chi.Mux) {
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   *config.CORS.AllowedOrigins,
-		AllowedMethods:   *config.CORS.AllowedMethods,
-		AllowedHeaders:   *config.CORS.AllowedHeaders,
-		AllowCredentials: false,
+		AllowedOrigins:   config.CORS.AllowedOrigins,
+		AllowedMethods:   config.CORS.AllowedMethods,
+		AllowedHeaders:   config.CORS.AllowedHeaders,
+		MaxAge:           config.CORS.MaxAge,
 		ExposedHeaders:   []string{"Link"},
-		MaxAge:           corsMaxAge,
+		AllowCredentials: false,
 	}))
 }
 
 // setupMetricsEndpoint sets up the metrics endpoint with isolated registry.
-func (s *Server) setupMetricsEndpoint(router *chi.Mux, config *Config) {
-	if *config.Metrics.Enabled {
-		router.Handle(*config.Metrics.Path, promhttp.HandlerFor(
-			s.registry,
+func (c *client) setupMetricsEndpoint(config Config, router *chi.Mux) {
+	if config.Metrics.Enabled {
+		router.Handle(config.Metrics.Path, promhttp.HandlerFor(
+			c.registry,
 			promhttp.HandlerOpts{},
 		))
 	}
 }
 
-// setupAPIHandler sets up the API handler with JWT authentication.
-func (s *Server) setupAPIHandler(
-	apiHandler api.ServerInterface,
+// setupAPIHandler sets up the API handler.
+func (c *client) setupAPIHandler(
+	apiHandler genAPI.ServerInterface,
 	router *chi.Mux,
-	jwtService *jwt.JWT,
-	logger *logger.Logger,
 ) http.Handler {
-	return api.HandlerWithOptions(apiHandler, api.ChiServerOptions{
+	return genAPI.HandlerWithOptions(apiHandler, genAPI.ChiServerOptions{
 		BaseRouter: router,
-		Middlewares: []api.MiddlewareFunc{
-			middleware.JWTAuth(jwtService, logger),
-		},
 	})
 }
 
 // createHTTPServer creates the HTTP server.
-func (s *Server) createHTTPServer(config *Config, handler http.Handler) *http.Server {
+func (c *client) createHTTPServer(config Config, handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:         *config.Host + ":" + strconv.Itoa(*config.Port),
+		Addr:         config.Host + ":" + strconv.Itoa(config.Port),
 		Handler:      handler,
-		ReadTimeout:  time.Duration(*config.ReadTimeout) * time.Second,
-		WriteTimeout: time.Duration(*config.WriteTimeout) * time.Second,
-		IdleTimeout:  time.Duration(*config.IdleTimeout) * time.Second,
+		ReadTimeout:  config.ReadTimeout,
+		WriteTimeout: config.WriteTimeout,
+		IdleTimeout:  config.IdleTimeout,
 	}
 }
 
 // Run runs HTTP server.
-func (s *Server) Run() error {
-	if s.httpServer == nil {
+func (c *client) Run() error {
+	if c.httpServer == nil {
 		return ErrServerNotInitialized
 	}
 
-	s.logger.Info().
-		Str("addr", s.httpServer.Addr).
-		Msg("starting server")
+	c.log.Info("starting server", "addr", c.httpServer.Addr)
 
-	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := c.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
@@ -436,16 +343,16 @@ func (s *Server) Run() error {
 }
 
 // Shutdown gracefully shuts down HTTP server.
-func (s *Server) Shutdown(ctx context.Context) error {
-	if s.httpServer == nil {
-		s.logger.Info().Msg("http server is not running, skipping shutdown")
+func (c *client) Shutdown(ctx context.Context) error {
+	if c.httpServer == nil {
+		c.log.Info("http server is not running, skipping shutdown")
 
 		return nil
 	}
 
-	s.logger.Info().Msg("shutting down server")
+	c.log.Info("shutting down server")
 
-	if err := s.httpServer.Shutdown(ctx); err != nil {
+	if err := c.httpServer.Shutdown(ctx); err != nil {
 		return fmt.Errorf("failed to shutdown server: %w", err)
 	}
 
