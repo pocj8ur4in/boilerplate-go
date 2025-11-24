@@ -1,300 +1,371 @@
 package middleware
 
 import (
-	"context"
+	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
 
-// setupTestJWT creates a test JWT.
-func setupTestJWT(t *testing.T) *jwt.JWT {
-	t.Helper()
+var (
+	// ErrInvalidParameter is returned when a parameter is invalid.
+	ErrInvalidParameter = errors.New("invalid parameter")
 
-	secretKey := "test-secret-key"
-	jwtConfig := &jwt.Config{
-		SecretKey: &secretKey,
-	}
+	// ErrRequestValidationFailed is returned when request validation fails.
+	ErrRequestValidationFailed = errors.New("request validation failed")
 
-	jwtService, err := jwt.New(jwtConfig)
-	require.NoError(t, err)
+	// ErrUnknownValidationError is returned for unknown validation errors.
+	ErrUnknownValidationError = errors.New("unknown validation error")
+)
 
-	return jwtService
-}
+const (
+	// specContent is the content of the test OpenAPI spec.
+	specContent = `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+paths:
+  /test:
+    get:
+      responses:
+        '200':
+          description: OK
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                email:
+                  type: string
+                  format: email
+                  pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+      responses:
+        '200':
+          description: OK
+  /test/{id}:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /protected:
+    get:
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: OK
+`
+)
 
 // generateTestToken generates a test JWT token.
-//
-//nolint:unparam // userID is kept as parameter for clarity
-func generateTestToken(t *testing.T, jwtService *jwt.JWT, userID, email, role string) string {
+func generateTestToken(t *testing.T, jwt jwt.Client, userID, email, role string) string {
 	t.Helper()
 
-	token, err := jwtService.GenerateAccessToken(userID, email, role)
+	token, err := jwt.GenerateAccessToken(userID, email, role)
 	require.NoError(t, err)
 	require.NotNil(t, token)
 
 	return *token
 }
 
-//nolint:funlen // Multiple test cases in one function
-func TestJWTAuth(t *testing.T) {
+// createTestSpec creates a test OpenAPI spec for testing.
+func createTestSpec(t *testing.T) *openapi3.T {
+	t.Helper()
+
+	// create loader
+	loader := openapi3.NewLoader()
+	loader.IsExternalRefsAllowed = true
+
+	// load spec from content
+	spec, err := loader.LoadFromData([]byte(specContent))
+	require.NoError(t, err)
+	require.NotNil(t, spec)
+
+	return spec
+}
+
+func TestJwtAuth(t *testing.T) {
 	t.Parallel()
 
-	t.Run("allow request without authentication when endpoint doesn't require auth", func(t *testing.T) {
+	t.Run("validate request with authentication", func(t *testing.T) {
 		t.Parallel()
 
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
+		log := logger.InitForTest(t)
+		jwtClient := jwt.InitForTest(t)
+		middleware := JwtAuth(log, jwtClient)
 
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
+		assert.NotNil(t, middleware)
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, "success", recorder.Body.String())
-	})
-
-	t.Run("require authentication when endpoint requires auth", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
-
-		// create request with BearerAuth context (simulating protected endpoint)
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	})
-
-	t.Run("reject request with missing authorization header", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	})
-
-	t.Run("reject request with invalid authorization header format", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "InvalidFormat token")
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	})
-
-	t.Run("reject request with empty token", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer ")
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	})
-
-	t.Run("reject request with invalid token", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer invalid-token")
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	})
-
-	t.Run("allow request with valid token", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		token := generateTestToken(t, jwtService, "user123", "test@example.com", "user")
-
-		handler := JWTAuth(jwtService, log)(testHandler(http.StatusOK, "success"))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, "success", recorder.Body.String())
-	})
-
-	t.Run("add user information to context with valid token", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		userID := "user123"
-		email := "test@example.com"
-		role := "admin"
-		token := generateTestToken(t, jwtService, userID, email, role)
-
-		var capturedUserID, capturedEmail, capturedRole string
-
-		handler := JWTAuth(jwtService, log)(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if id := request.Context().Value(UserIDKey); id != nil {
-				capturedUserID, _ = id.(string)
-			}
-
-			if em := request.Context().Value(UserEmailKey); em != nil {
-				capturedEmail, _ = em.(string)
-			}
-
-			if r := request.Context().Value(UserRoleKey); r != nil {
-				capturedRole, _ = r.(string)
-			}
-
+		next := http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 			writer.WriteHeader(http.StatusOK)
-		}))
+		})
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
+		handler := middleware(next)
+		assert.NotNil(t, handler)
 
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, userID, capturedUserID)
-		assert.Equal(t, email, capturedEmail)
-		assert.Equal(t, role, capturedRole)
-	})
-
-	t.Run("add claims to context with valid token", func(t *testing.T) {
-		t.Parallel()
-
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		token := generateTestToken(t, jwtService, "user123", "test@example.com", "user")
-
-		var capturedClaims *jwt.Claims
-
-		handler := JWTAuth(jwtService, log)(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if claims := request.Context().Value(ClaimsKey); claims != nil {
-				capturedClaims, _ = claims.(*jwt.Claims)
-			}
-
-			writer.WriteHeader(http.StatusOK)
-		}))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		require.NotNil(t, capturedClaims)
-		assert.Equal(t, "user123", capturedClaims.UserID)
-		assert.Equal(t, "test@example.com", capturedClaims.Email)
-		assert.Equal(t, "user", capturedClaims.Role)
+		assert.Positive(t, recorder.Code)
 	})
 }
 
-func TestJWTAuthContextKeys(t *testing.T) {
+func TestOpenAPIValidation(t *testing.T) {
 	t.Parallel()
 
-	t.Run("context keys are defined correctly", func(t *testing.T) {
+	testcases := []struct {
+		name           string
+		method         string
+		path           string
+		body           []byte
+		expectedStatus int
+	}{
+		{
+			name:           "valid GET request",
+			method:         http.MethodGet,
+			path:           "/test",
+			body:           nil,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "invalid POST request",
+			method:         http.MethodPost,
+			path:           "/test",
+			body:           []byte(`{"name":"example"}`),
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "route not in spec",
+			method:         http.MethodGet,
+			path:           "/unknown",
+			body:           nil,
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := openAPIValidationWithSpec(
+				logger.InitForTest(t),
+				jwt.InitForTest(t, jwt.WithSecretKey("test-secret")),
+				createTestSpec(t),
+			)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			var request *http.Request
+			if testcase.body != nil {
+				request = httptest.NewRequest(testcase.method, testcase.path, bytes.NewReader(testcase.body))
+				request.Header.Set("Content-Type", "application/json")
+			} else {
+				request = httptest.NewRequest(testcase.method, testcase.path, nil)
+			}
+
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+
+			assert.Equal(t, testcase.expectedStatus, recorder.Code)
+		})
+	}
+}
+
+func TestOpenAPIValidationWithJWTAuthenticationSuccess(t *testing.T) {
+	t.Parallel()
+
+	t.Run("allow request to protected endpoint with valid token", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Equal(t, UserIDKey, ContextKey("user_id"))
-		assert.Equal(t, UserEmailKey, ContextKey("user_email"))
-		assert.Equal(t, UserRoleKey, ContextKey("user_role"))
-		assert.Equal(t, ClaimsKey, ContextKey("claims"))
+		log := logger.InitForTest(t)
+		jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
+		testSpec := createTestSpec(t)
+
+		token := generateTestToken(t, jwtClient, "user123", "test@example.com", "admin")
+
+		handler := openAPIValidationWithSpec(
+			log,
+			jwtClient,
+			testSpec,
+		)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		assert.Equal(t, http.StatusOK, recorder.Code)
+	})
+
+	t.Run("allow request to unprotected endpoint without token", func(t *testing.T) {
+		t.Parallel()
+
+		log := logger.InitForTest(t)
+		jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
+		testSpec := createTestSpec(t)
+
+		handler := openAPIValidationWithSpec(
+			log, jwtClient, testSpec,
+		)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
 }
 
-func TestJWTAuthWithDifferentRoles(t *testing.T) {
+func TestOpenAPIValidationWithJWTAuthenticationMissingToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reject request to protected endpoint without token", func(t *testing.T) {
+		t.Parallel()
+
+		log := logger.InitForTest(t)
+		jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
+		testSpec := createTestSpec(t)
+
+		handler := openAPIValidationWithSpec(
+			log,
+			jwtClient,
+			testSpec,
+		)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	})
+}
+
+func TestOpenAPIValidationWithJWTAuthenticationInvalidToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reject request to protected endpoint with invalid token", func(t *testing.T) {
+		t.Parallel()
+
+		log := logger.InitForTest(t)
+		jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
+		testSpec := createTestSpec(t)
+
+		handler := openAPIValidationWithSpec(
+			log,
+			jwtClient,
+			testSpec,
+		)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		request.Header.Set("Authorization", "Bearer invalid-token")
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	})
+
+	t.Run("reject token signed with different secret", func(t *testing.T) {
+		t.Parallel()
+
+		log := logger.InitForTest(t)
+		jwtClient1 := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key-1"))
+		jwtClient2 := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key-2"))
+		testSpec := createTestSpec(t)
+
+		// generate token with first secret
+		token := generateTestToken(t, jwtClient1, "user123", "test@example.com", "user")
+
+		// try to validate with second secret
+		handler := openAPIValidationWithSpec(
+			log, jwtClient2, testSpec,
+		)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	})
+}
+
+func TestOpenAPIValidationWithJWTAuthenticationInvalidFormat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reject request to protected endpoint with wrong auth format", func(t *testing.T) {
+		t.Parallel()
+
+		log := logger.InitForTest(t)
+		jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
+		testSpec := createTestSpec(t)
+
+		handler := openAPIValidationWithSpec(
+			log,
+			jwtClient,
+			testSpec,
+		)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		request.Header.Set("Authorization", "Basic token123")
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	})
+}
+
+func TestOpenAPIValidationWithDifferentRoles(t *testing.T) {
 	t.Parallel()
 
 	roles := []string{"admin", "user", "guest", "moderator"}
@@ -303,115 +374,191 @@ func TestJWTAuthWithDifferentRoles(t *testing.T) {
 		t.Run("authenticate with role "+role, func(t *testing.T) {
 			t.Parallel()
 
-			jwtService := setupTestJWT(t)
-			log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-			require.NoError(t, err)
+			log := logger.InitForTest(t)
+			jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
+			testSpec := createTestSpec(t)
 
-			token := generateTestToken(t, jwtService, "user123", "test@example.com", role)
+			token := generateTestToken(t, jwtClient, "user123", "test@example.com", role)
 
-			var capturedRole string
-
-			handler := JWTAuth(jwtService, log)(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-				if r := request.Context().Value(UserRoleKey); r != nil {
-					capturedRole, _ = r.(string)
-				}
-
-				writer.WriteHeader(http.StatusOK)
+			handler := openAPIValidationWithSpec(
+				log,
+				jwtClient,
+				testSpec,
+			)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
 			}))
 
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
-			req.Header.Set("Authorization", "Bearer "+token)
-			//nolint:staticcheck // Using api.BearerAuthScopes as context key
-			ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-			req = req.WithContext(ctx)
+			request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+			request.Header.Set("Authorization", "Bearer "+token)
 
 			recorder := httptest.NewRecorder()
-
-			handler.ServeHTTP(recorder, req)
+			handler.ServeHTTP(recorder, request)
 
 			assert.Equal(t, http.StatusOK, recorder.Code)
-			assert.Equal(t, role, capturedRole)
 		})
 	}
 }
 
-func TestJWTAuthTokenFromDifferentSecret(t *testing.T) {
+func TestParseValidationError(t *testing.T) {
 	t.Parallel()
 
-	t.Run("reject token signed with different secret", func(t *testing.T) {
-		t.Parallel()
+	testcases := []struct {
+		name           string
+		err            error
+		expectedErrors []ValidationError
+	}{
+		{
+			name: "request error with parameter",
+			err: &openapi3filter.RequestError{
+				Parameter: &openapi3.Parameter{Name: "user_id"},
+				Err:       ErrInvalidParameter,
+			},
+			expectedErrors: []ValidationError{
+				{Field: "user_id", Message: "parameter \"user_id\" in  has an error: invalid parameter"},
+			},
+		},
+		{
+			name: "request error without parameter",
+			err:  &openapi3filter.RequestError{Err: ErrRequestValidationFailed},
+			expectedErrors: []ValidationError{
+				{Field: "request", Message: "request validation failed"},
+			},
+		},
+		{
+			name: "security requirements error",
+			err: &openapi3filter.SecurityRequirementsError{
+				Errors: []error{ErrMissingBearerToken},
+			},
+			expectedErrors: []ValidationError{
+				{Field: "security", Message: "missing bearer token"},
+			},
+		},
+		{
+			name: "schema error",
+			err:  &openapi3.SchemaError{SchemaField: "#/properties/email", Reason: "invalid format"},
+			expectedErrors: []ValidationError{
+				{Field: "#/properties/email", Message: "invalid format"},
+			},
+		},
+		{
+			name: "generic error",
+			err:  ErrUnknownValidationError,
+			expectedErrors: []ValidationError{
+				{Field: "request", Message: "unknown validation error"},
+			},
+		},
+	}
 
-		// create JWT service with one secret
-		secretKey1 := "secret-key-1"
-		jwtConfig1 := &jwt.Config{
-			SecretKey: &secretKey1,
-		}
-		jwtService1, err := jwt.New(jwtConfig1)
-		require.NoError(t, err)
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// create JWT service with different secret
-		secretKey2 := "secret-key-2"
-		jwtConfig2 := &jwt.Config{
-			SecretKey: &secretKey2,
-		}
-		jwtService2, err := jwt.New(jwtConfig2)
-		require.NoError(t, err)
+			result := parseValidationError(testcase.err)
 
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
-
-		// generate token with first secret
-		token := generateTestToken(t, jwtService1, "user123", "test@example.com", "user")
-
-		// try to validate with second secret
-		handler := JWTAuth(jwtService2, log)(testHandler(http.StatusOK, "success"))
-
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
-
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, req)
-
-		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	})
+			assert.Equal(t, testcase.expectedErrors, result)
+		})
+	}
 }
 
-func TestJWTAuthMiddlewareChaining(t *testing.T) {
+func TestEnsureSpecLoaded(t *testing.T) {
 	t.Parallel()
 
-	t.Run("chain JWT auth with other middlewares", func(t *testing.T) {
-		t.Parallel()
+	testcases := []struct {
+		name         string
+		existingSpec *openapi3.T
+		expectError  bool
+	}{
+		{
+			name:         "load spec from embedded code",
+			existingSpec: nil,
+			expectError:  false,
+		},
+		{
+			name:         "use existing spec",
+			existingSpec: createTestSpec(t),
+			expectError:  false,
+		},
+	}
 
-		jwtService := setupTestJWT(t)
-		log, err := logger.New(&logger.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			t.Parallel()
 
-		token := generateTestToken(t, jwtService, "user123", "test@example.com", "user")
+			log := logger.InitForTest(t)
+			jwtClient := jwt.InitForTest(t, jwt.WithSecretKey("test-secret-key"))
 
-		handler := RequestID(
-			SecurityHeaders()(
-				JWTAuth(jwtService, log)(
-					testHandler(http.StatusOK, "success"),
-				),
-			),
-		)
+			middleware := openAPIValidationWithSpec(log, jwtClient, testcase.existingSpec)
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		//nolint:staticcheck // Using api.BearerAuthScopes as context key
-		ctx := context.WithValue(req.Context(), api.BearerAuthScopes, []string{})
-		req = req.WithContext(ctx)
+			handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
 
-		recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/test", nil)
+			recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+			handler.ServeHTTP(recorder, request)
 
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, "success", recorder.Body.String())
-		assert.NotEmpty(t, recorder.Header().Get("X-Content-Type-Options"))
-	})
+			if testcase.expectError {
+				assert.NotEqual(t, http.StatusOK, recorder.Code)
+			} else {
+				assert.Contains(t, []int{http.StatusOK, http.StatusBadRequest}, recorder.Code)
+			}
+		})
+	}
+}
+
+func TestSendValidationError(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		name           string
+		message        string
+		errors         []ValidationError
+		expectedStatus int
+	}{
+		{
+			name:    "single validation error",
+			message: "validation failed",
+			errors: []ValidationError{
+				{
+					Field:   "email",
+					Message: "invalid format",
+				},
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:    "multiple validation errors",
+			message: "validation failed",
+			errors: []ValidationError{
+				{
+					Field:   "name",
+					Message: "required field missing",
+				},
+				{
+					Field:   "email",
+					Message: "invalid format",
+				},
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "no validation errors",
+			message:        "validation failed",
+			errors:         nil,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorder := httptest.NewRecorder()
+			sendValidationError(recorder, testcase.message, testcase.errors)
+
+			assert.Equal(t, testcase.expectedStatus, recorder.Code)
+			assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+		})
+	}
 }

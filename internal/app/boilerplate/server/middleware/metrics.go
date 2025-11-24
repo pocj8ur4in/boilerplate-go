@@ -21,7 +21,7 @@ const (
 	bucketCount = 8
 )
 
-// metricsCollector holds all prometheus metrics collectors.
+// metricsCollector holds prometheus metrics collectors.
 type metricsCollector struct {
 	// requestsTotal is the total number of requests.
 	requestsTotal *prometheus.CounterVec
@@ -42,31 +42,16 @@ type metricsCollector struct {
 // MetricsConfig represents configuration for metrics middleware.
 type MetricsConfig struct {
 	// Enabled is whether metrics collection is enabled.
-	Enabled *bool `json:"enabled"`
+	Enabled bool `env:"ENABLED" envDefault:"true" json:"enabled"`
 
 	// Path is the path for metrics endpoint.
-	Path *string `json:"path"`
+	Path string `env:"PATH" envDefault:"/metrics" json:"path"`
 
 	// ExcludePaths is a list of paths to exclude from metrics.
-	ExcludePaths []string `json:"exclude_paths"`
+	ExcludePaths []string `env:"EXCLUDE_PATHS" envDefault:"/health,/status" json:"exclude_paths"`
 }
 
-// SetDefault sets default values.
-func (c *MetricsConfig) SetDefault() {
-	if c.Enabled == nil {
-		c.Enabled = &[]bool{true}[0]
-	}
-
-	if c.Path == nil {
-		c.Path = &[]string{"/metrics"}[0]
-	}
-
-	if c.ExcludePaths == nil {
-		c.ExcludePaths = []string{"/health", "/status"}
-	}
-}
-
-// newMetricsCollector creates a new metrics collector.
+// newMetricsCollector creates metrics collector.
 func newMetricsCollector(registry prometheus.Registerer) *metricsCollector {
 	return &metricsCollector{
 		requestsTotal: promauto.With(registry).NewCounterVec(
@@ -110,25 +95,13 @@ func newMetricsCollector(registry prometheus.Registerer) *metricsCollector {
 }
 
 // Metrics is a middleware that collects Prometheus metrics.
-func Metrics(config *MetricsConfig, registry prometheus.Registerer) func(next http.Handler) http.Handler {
-	// set default config
-	if config == nil {
-		config = &MetricsConfig{}
-	}
-
-	config.SetDefault()
-
-	// use default registry if none provided
-	if registry == nil {
-		registry = prometheus.DefaultRegisterer
-	}
-
+func Metrics(config MetricsConfig, registry prometheus.Registerer) func(next http.Handler) http.Handler {
 	// create collector instance for this middleware
 	collector := newMetricsCollector(registry)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if shouldSkipMetrics(config, request) {
+			if shouldSkipMetrics(&config, request) {
 				next.ServeHTTP(writer, request)
 
 				return
@@ -141,12 +114,12 @@ func Metrics(config *MetricsConfig, registry prometheus.Registerer) func(next ht
 
 // shouldSkipMetrics checks if metrics should be skipped for this request.
 func shouldSkipMetrics(config *MetricsConfig, request *http.Request) bool {
-	if !*config.Enabled {
+	if !config.Enabled {
 		return true
 	}
 
 	path := request.URL.Path
-	if path == *config.Path {
+	if path == config.Path {
 		return true
 	}
 

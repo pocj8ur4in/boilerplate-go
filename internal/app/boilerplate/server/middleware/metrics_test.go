@@ -11,42 +11,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMetricsConfigSetDefault(t *testing.T) {
+func TestMetricsConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("set default values when config is empty", func(t *testing.T) {
+	t.Run("create metrics config with custom values", func(t *testing.T) {
 		t.Parallel()
 
-		config := &MetricsConfig{}
-		config.SetDefault()
+		config := MetricsConfig{
+			Enabled:      true,
+			Path:         "/metrics",
+			ExcludePaths: []string{"/health", "/status"},
+		}
 
-		require.NotNil(t, config.Enabled)
-		require.NotNil(t, config.Path)
-		require.NotNil(t, config.ExcludePaths)
-
-		assert.True(t, *config.Enabled)
-		assert.Equal(t, "/metrics", *config.Path)
+		assert.True(t, config.Enabled)
+		assert.Equal(t, "/metrics", config.Path)
 		assert.Contains(t, config.ExcludePaths, "/health")
 		assert.Contains(t, config.ExcludePaths, "/status")
 	})
 
-	t.Run("not override existing values", func(t *testing.T) {
+	t.Run("create metrics config with custom path", func(t *testing.T) {
 		t.Parallel()
 
-		enabled := false
-		path := "/test-metrics"
-		excludePaths := []string{"/test"}
-
-		config := &MetricsConfig{
-			Enabled:      &enabled,
-			Path:         &path,
-			ExcludePaths: excludePaths,
+		config := MetricsConfig{
+			Enabled:      false,
+			Path:         "/test-metrics",
+			ExcludePaths: []string{"/test"},
 		}
 
-		config.SetDefault()
-
-		assert.False(t, *config.Enabled)
-		assert.Equal(t, "/test-metrics", *config.Path)
+		assert.False(t, config.Enabled)
+		assert.Equal(t, "/test-metrics", config.Path)
 		assert.Equal(t, []string{"/test"}, config.ExcludePaths)
 	})
 }
@@ -59,7 +52,7 @@ func TestMetrics(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		config := &MetricsConfig{}
+		config := MetricsConfig{}
 
 		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
@@ -81,16 +74,16 @@ func TestMetrics(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		config := &MetricsConfig{
+		config := MetricsConfig{
 			ExcludePaths: []string{"/health"},
 		}
 
 		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		request := httptest.NewRequest(http.MethodGet, "/health", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
@@ -99,14 +92,14 @@ func TestMetrics(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		config := &MetricsConfig{}
+		config := MetricsConfig{}
 
 		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
-		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
@@ -115,31 +108,31 @@ func TestMetrics(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		enabled := false
-		config := &MetricsConfig{
-			Enabled: &enabled,
+		config := MetricsConfig{
+			Enabled: false,
 		}
 
 		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
 
-	t.Run("metrics middleware with nil config uses defaults", func(t *testing.T) {
+	t.Run("metrics middleware with zero config uses defaults", func(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		handler := Metrics(nil, registry)(testHandler(http.StatusOK, "success"))
+		config := MetricsConfig{}
+		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
@@ -147,13 +140,13 @@ func TestMetrics(t *testing.T) {
 	t.Run("metrics middleware with nil registry uses default registry", func(t *testing.T) {
 		t.Parallel()
 
-		config := &MetricsConfig{}
+		config := MetricsConfig{}
 		handler := Metrics(config, nil)(testHandler(http.StatusOK, "success"))
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
@@ -177,14 +170,14 @@ func TestMetricsWithDifferentStatusCodes(t *testing.T) {
 			t.Parallel()
 
 			registry := prometheus.NewRegistry()
-			config := &MetricsConfig{}
+			config := MetricsConfig{}
 
 			handler := Metrics(config, registry)(testHandler(statusCode, "response"))
 
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			request := httptest.NewRequest(http.MethodGet, "/test", nil)
 			recorder := httptest.NewRecorder()
 
-			handler.ServeHTTP(recorder, req)
+			handler.ServeHTTP(recorder, request)
 
 			assert.Equal(t, statusCode, recorder.Code)
 		})
@@ -207,14 +200,14 @@ func TestMetricsWithDifferentMethods(t *testing.T) {
 			t.Parallel()
 
 			registry := prometheus.NewRegistry()
-			config := &MetricsConfig{}
+			config := MetricsConfig{}
 
 			handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
-			req := httptest.NewRequest(method, "/test", nil)
+			request := httptest.NewRequest(method, "/test", nil)
 			recorder := httptest.NewRecorder()
 
-			handler.ServeHTTP(recorder, req)
+			handler.ServeHTTP(recorder, request)
 
 			assert.Equal(t, http.StatusOK, recorder.Code)
 		})
@@ -228,16 +221,16 @@ func TestMetricsWithRequestBody(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		config := &MetricsConfig{}
+		config := MetricsConfig{}
 
 		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
 		body := strings.NewReader(`{"key": "value"}`)
-		req := httptest.NewRequest(http.MethodPost, "/test", body)
-		req.ContentLength = int64(body.Len())
+		request := httptest.NewRequest(http.MethodPost, "/test", body)
+		request.ContentLength = int64(body.Len())
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 
@@ -251,14 +244,14 @@ func TestMetricsWithRequestBody(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		config := &MetricsConfig{}
+		config := MetricsConfig{}
 
 		handler := Metrics(config, registry)(testHandler(http.StatusOK, "success"))
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 	})
@@ -288,51 +281,48 @@ func TestShouldSkipMetrics(t *testing.T) {
 	t.Run("skip when metrics disabled", func(t *testing.T) {
 		t.Parallel()
 
-		enabled := false
-		config := &MetricsConfig{
-			Enabled: &enabled,
+		config := MetricsConfig{
+			Enabled: false,
 		}
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		assert.True(t, shouldSkipMetrics(config, req))
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
+		assert.True(t, shouldSkipMetrics(&config, request))
 	})
 
 	t.Run("skip metrics endpoint", func(t *testing.T) {
 		t.Parallel()
 
-		path := "/metrics"
-		config := &MetricsConfig{
-			Path: &path,
+		config := MetricsConfig{
+			Path: "/metrics",
 		}
-		config.SetDefault()
 
-		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-		assert.True(t, shouldSkipMetrics(config, req))
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		assert.True(t, shouldSkipMetrics(&config, request))
 	})
 
 	t.Run("skip excluded paths", func(t *testing.T) {
 		t.Parallel()
 
-		config := &MetricsConfig{
+		config := MetricsConfig{
 			ExcludePaths: []string{"/health", "/status"},
 		}
-		config.SetDefault()
 
-		req1 := httptest.NewRequest(http.MethodGet, "/health", nil)
-		assert.True(t, shouldSkipMetrics(config, req1))
+		request1 := httptest.NewRequest(http.MethodGet, "/health", nil)
+		assert.True(t, shouldSkipMetrics(&config, request1))
 
-		req2 := httptest.NewRequest(http.MethodGet, "/status", nil)
-		assert.True(t, shouldSkipMetrics(config, req2))
+		request2 := httptest.NewRequest(http.MethodGet, "/status", nil)
+		assert.True(t, shouldSkipMetrics(&config, request2))
 	})
 
 	t.Run("do not skip normal paths", func(t *testing.T) {
 		t.Parallel()
 
-		config := &MetricsConfig{}
-		config.SetDefault()
+		config := MetricsConfig{
+			Enabled: true,
+		}
 
-		req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
-		assert.False(t, shouldSkipMetrics(config, req))
+		request := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+		assert.False(t, shouldSkipMetrics(&config, request))
 	})
 }
 
@@ -343,7 +333,7 @@ func TestMetricsMiddlewareChaining(t *testing.T) {
 		t.Parallel()
 
 		registry := prometheus.NewRegistry()
-		config := &MetricsConfig{}
+		config := MetricsConfig{}
 
 		handler := RequestID(
 			SecurityHeaders()(
@@ -353,10 +343,10 @@ func TestMetricsMiddlewareChaining(t *testing.T) {
 			),
 		)
 
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		request := httptest.NewRequest(http.MethodGet, "/test", nil)
 		recorder := httptest.NewRecorder()
 
-		handler.ServeHTTP(recorder, req)
+		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusOK, recorder.Code)
 		assert.Equal(t, "success", recorder.Body.String())

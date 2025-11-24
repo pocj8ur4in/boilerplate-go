@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -61,9 +62,16 @@ func RequestSize(maxBytes int64) func(next http.Handler) http.Handler {
 }
 
 // LogRequest is a middleware that logs HTTP requests.
-func LogRequest(logger *logger.Logger) func(next http.Handler) http.Handler {
+func LogRequest(log logger.Client) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			// skip if log level is not debug
+			if log.Level() > slog.LevelDebug {
+				next.ServeHTTP(writer, request)
+
+				return
+			}
+
 			start := time.Now()
 
 			// wrap response writer to capture status code
@@ -72,24 +80,19 @@ func LogRequest(logger *logger.Logger) func(next http.Handler) http.Handler {
 			// process request
 			next.ServeHTTP(wrappedWriter, request)
 
-			// set log request
-			log := logger.Debug().
-				Str("method", request.Method).
-				Str("path", request.URL.Path).
-				Str("remote_addr", request.RemoteAddr).
-				Str("user_agent", request.UserAgent()).
-				Int("status", wrappedWriter.Status()).
-				Int("bytes", wrappedWriter.BytesWritten()).
-				Dur("duration", time.Since(start))
+			// get logger from context
+			logWithCtx := log.Ctx(request.Context())
 
-			// set request ID on log
-			if requestID := request.Context().Value(middleware.RequestIDKey); requestID != nil {
-				if id, ok := requestID.(string); ok {
-					log = log.Str("request_id", id)
-				}
-			}
-
-			log.Msg("http request")
+			// build log message for request
+			logWithCtx.Debug("http request",
+				"method", request.Method,
+				"path", request.URL.Path,
+				"remote_addr", request.RemoteAddr,
+				"user_agent", request.UserAgent(),
+				"status", wrappedWriter.Status(),
+				"bytes", wrappedWriter.BytesWritten(),
+				"duration", time.Since(start),
+			)
 		})
 	}
 }
@@ -97,4 +100,9 @@ func LogRequest(logger *logger.Logger) func(next http.Handler) http.Handler {
 // Timeout is a middleware that sets a timeout for the request.
 func Timeout(timeout time.Duration) func(next http.Handler) http.Handler {
 	return middleware.Timeout(timeout)
+}
+
+// Compress is a middleware that compresses the response.
+func Compress(level int, format string) func(next http.Handler) http.Handler {
+	return middleware.Compress(level, format)
 }
