@@ -16,17 +16,25 @@ const (
 )
 
 // StatusCheck handles GET /status endpoint.
-func (h *Handler) StatusCheck(writer http.ResponseWriter, _ *http.Request) {
-	h.sendResponse(writer, http.StatusOK, map[string]interface{}{})
+func (c *client) StatusCheck(writer http.ResponseWriter, _ *http.Request) {
+	c.sendResponse(writer, http.StatusOK, map[string]interface{}{})
 }
 
 // HealthCheck handles GET /health endpoint.
-func (h *Handler) HealthCheck(writer http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), healthCheckTimeout)
-	defer cancel()
+func (c *client) HealthCheck(writer http.ResponseWriter, request *http.Request) {
+	// get logger from context
+	log := c.log.Ctx(request.Context())
+
+	// create context with timeout
+	ctx, cancel := context.WithTimeout(request.Context(), healthCheckTimeout)
+
+	defer func() {
+		cancel()
+		log.Debug("health check context cancelled by timeout")
+	}()
 
 	// set response
-	resp := api.SystemHealthCheckResponse{
+	response := api.SystemHealthCheckResponse{
 		Timestamp: time.Now(),
 		Services: api.SystemHealthCheckResponseServices{
 			Database: true,
@@ -35,23 +43,23 @@ func (h *Handler) HealthCheck(writer http.ResponseWriter, r *http.Request) {
 	}
 
 	// check database health
-	if err := h.db.PingContext(ctx); err != nil {
-		h.logger.Error().Err(err).Msg("database health check failed")
+	if err := c.db.PingContext(ctx); err != nil {
+		log.Error("database health check failed", "error", err)
 
-		resp.Services.Database = false
+		response.Services.Database = false
 	}
 
 	// check redis health
-	if err := h.redis.Ping(ctx).Err(); err != nil {
-		h.logger.Error().Err(err).Msg("redis health check failed")
+	if err := c.redis.Ping(ctx).Err(); err != nil {
+		log.Error("redis health check failed", "error", err)
 
-		resp.Services.Redis = false
+		response.Services.Redis = false
 	}
 
-	h.sendResponse(writer, http.StatusOK, resp)
+	c.sendResponse(writer, http.StatusOK, response)
 }
 
 // HandleMetrics handles GET /metrics endpoint.
-func (h *Handler) HandleMetrics(writer http.ResponseWriter, request *http.Request) {
+func (c *client) HandleMetrics(writer http.ResponseWriter, request *http.Request) {
 	promhttp.Handler().ServeHTTP(writer, request)
 }
