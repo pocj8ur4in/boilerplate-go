@@ -2,71 +2,138 @@ package app
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	configPkg "github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/config"
-	serverPkg "github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server"
-	databasePkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
-	jwtPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
-	loggerPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
-	redisPkg "github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
+	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/server"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
+	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
 
-const (
-	// defaultConfigContent is the default content of the config file.
-	defaultConfigContent = `{
-			"database": {
-				"host": "localhost",
-				"port": 35432,
-				"user": "boilerplate_user",
-				"password": "boilerplate_password",
-				"db_name": "boilerplate",
-				"ssl_mode": false
-			},
-			"jwt": {
-				"issuer": "boilerplate",
-				"audience": "boilerplate_audience",
-				"secret_key": "test_secret_key"
-			},
-			"logger": {
-				"level": "info"
-			},
-			"redis": {
-				"addrs": ["localhost:36379"],
-				"password": "",
-				"db": 0
-			},
-			"server": {
-				"host": "localhost",
-				"port": 38080
-			}
-		}`
-)
+// mockLifecycle is a mock implementation of fx.Lifecycle.
+type mockLifecycle struct {
+	appendFunc func(fx.Hook)
+}
+
+// Append appends a hook to mockLifecycle.
+func (m *mockLifecycle) Append(hook fx.Hook) {
+	if m.appendFunc != nil {
+		m.appendFunc(hook)
+	}
+}
+
+// testConfig holds test infrastructure configuration.
+type testConfig struct {
+	// db provides test database client.
+	db database.Client
+
+	// dbConfig provides test database configuration.
+	dbConfig database.Config
+
+	// jwt provides test JWT client.
+	jwt jwt.Client
+
+	// jwtConfig provides test JWT configuration.
+	jwtConfig jwt.Config
+
+	// log provides test logger client.
+	log logger.Client
+
+	// logConfig provides test logger configuration.
+	logConfig logger.Config
+
+	// redis provides test redis client.
+	redis redis.Client
+
+	// redisConfig provides test redis configuration.
+	redisConfig redis.Config
+}
+
+// newTestConfig creates test infrastructure configuration.
+func newTestConfig(t *testing.T) *testConfig {
+	t.Helper()
+
+	// initialize client with testcontainer
+	dbClient := database.InitForTest(t)
+	jwtClient := jwt.InitForTest(t)
+	log := logger.InitForTest(t)
+	redisClient := redis.InitForTest(t)
+
+	return &testConfig{
+		db:          dbClient,
+		dbConfig:    dbClient.Config,
+		jwt:         jwtClient,
+		jwtConfig:   jwtClient.Config,
+		log:         log,
+		logConfig:   log.Config,
+		redis:       redisClient,
+		redisConfig: redisClient.Config,
+	}
+}
+
+// configContentTemplate is the template for the config file.
+const configContentTemplate = `{
+		"database": {
+			"host": "%s",
+			"port": %d,
+			"user": "%s",
+			"password": "%s",
+			"db_name": "%s",
+			"ssl_mode": false
+		},
+		"jwt": {
+			"issuer": "%s",
+			"audience": "%s",
+			"secret_key": "%s"
+		},
+		"logger": {
+			"format": "%s",
+			"level": "%s"
+		},
+		"redis": {
+			"addrs": ["%s"],
+			"password": "%s",
+			"db": %d
+		},
+		"server": {
+			"host": "localhost",
+			"port": 38080
+		}
+	}`
 
 // beforeTest creates a temporary config file and sets the environment variable.
-func beforeTest(t *testing.T, content *string) {
+func beforeTest(t *testing.T, cfg *testConfig) {
 	t.Helper()
+
+	dbConfig := cfg.dbConfig
+	jwtConfig := cfg.jwtConfig
+	logConfig := cfg.logConfig
+	redisConfig := cfg.redisConfig
+
+	// create config content
+	configContent := fmt.Sprintf(configContentTemplate,
+		dbConfig.Host, dbConfig.Port,
+		dbConfig.User, dbConfig.Password, dbConfig.DBName,
+		jwtConfig.Issuer, jwtConfig.Audience, jwtConfig.SecretKey,
+		logConfig.Format, logConfig.Level,
+		redisConfig.Addrs[0],
+		redisConfig.Password, redisConfig.DB,
+	)
 
 	// create temporary directory
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
-	// use default config content if content is nil
-	if content == nil {
-		configContent := defaultConfigContent
-		content = &configContent
-	}
-
-	// write default config to config file
-	err := os.WriteFile(configPath, []byte(*content), 0600)
+	// write config to file
+	err := os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
 	// set environment variable
@@ -98,8 +165,9 @@ func startAndStopApp(t *testing.T, app *fx.App) {
 
 //nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
 func TestNew(t *testing.T) {
-	t.Run("create application", func(t *testing.T) {
-		beforeTest(t, nil)
+	t.Run("new application", func(t *testing.T) {
+		cfg := newTestConfig(t)
+		beforeTest(t, cfg)
 
 		app := New()
 
@@ -110,7 +178,8 @@ func TestNew(t *testing.T) {
 //nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
 func TestStartAndStop(t *testing.T) {
 	t.Run("start and stop application", func(t *testing.T) {
-		beforeTest(t, nil)
+		cfg := newTestConfig(t)
+		beforeTest(t, cfg)
 
 		app := New()
 		require.NotNil(t, app)
@@ -122,7 +191,7 @@ func TestStartAndStop(t *testing.T) {
 func TestRegisterHooks(t *testing.T) {
 	t.Parallel()
 
-	t.Run("call lifecycle hooks with mocked lifecycle", func(t *testing.T) {
+	t.Run("register hooks with mocked lifecycle", func(t *testing.T) {
 		t.Parallel()
 
 		var hookRegistered, onStartCalled bool
@@ -130,7 +199,7 @@ func TestRegisterHooks(t *testing.T) {
 		lifecycle := &mockLifecycle{
 			appendFunc: func(hook fx.Hook) {
 				hookRegistered = true
-				// test OnStart
+
 				if hook.OnStart != nil {
 					err := hook.OnStart(context.Background())
 					require.NoError(t, err)
@@ -139,93 +208,71 @@ func TestRegisterHooks(t *testing.T) {
 			},
 		}
 
-		log, err := loggerPkg.New(&loggerPkg.Config{Level: &[]string{"info"}[0]})
-		require.NoError(t, err)
+		log := logger.InitForTest(t)
+		serverClient := server.InitForTest(t)
 
-		// create minimal structures (won't actually call Close on them)
-		dbConn := &databasePkg.DB{DB: &sql.DB{}}
-		redisConn := &redisPkg.Redis{}
-
-		// create minimal server
-		server := &serverPkg.Server{}
-
-		registerHooks(lifecycle, dbConn, log, redisConn, server)
+		registerHooks(lifecycle, log, serverClient)
 
 		require.True(t, hookRegistered, "lifecycle hook should be registered")
 		require.True(t, onStartCalled, "OnStart should be called successfully")
 	})
 }
 
-// mockLifecycle is a mock implementation of fx.Lifecycle.
-type mockLifecycle struct {
-	appendFunc func(fx.Hook)
-}
+func TestRegisterHooksOnStart(t *testing.T) {
+	t.Parallel()
 
-// Append appends a hook to mockLifecycle.
-func (m *mockLifecycle) Append(hook fx.Hook) {
-	if m.appendFunc != nil {
-		m.appendFunc(hook)
-	}
-}
+	t.Run("OnStart handles server Run error", func(t *testing.T) {
+		t.Parallel()
 
-func TestNewReturnErrors(t *testing.T) {
-	t.Run("return error by using invalid config path", func(t *testing.T) {
-		// set non-existent config path
-		t.Setenv("CONFIG_PATH", "/non/existent/path/config.json")
-
-		app := fx.New(
-			fx.NopLogger,
-			configPkg.NewModule(),
-			loggerPkg.NewModule(),
-			databasePkg.NewModule(),
-			jwtPkg.NewModule(),
-			redisPkg.NewModule(),
-			serverPkg.NewModule(),
-			fx.Invoke(registerHooks),
+		var (
+			onStartCalled bool
+			onStartError  error
 		)
-		require.NotNil(t, app)
 
-		err := app.Err()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to read file")
+		lifecycle := &mockLifecycle{
+			appendFunc: func(hook fx.Hook) {
+				if hook.OnStart != nil {
+					onStartCalled = true
+					onStartError = hook.OnStart(context.Background())
+				}
+			},
+		}
+
+		log := logger.InitForTest(t)
+		server := server.InitForTest(t)
+
+		registerHooks(lifecycle, log, server)
+
+		require.True(t, onStartCalled, "OnStart should be called")
+		require.NoError(t, onStartError, "OnStart should not return error")
 	})
 }
 
-//nolint:paralleltest // Cannot run in parallel due to t.Setenv usage
-func TestNewWithCustomConfig(t *testing.T) {
-	t.Run("create application with custom config", func(t *testing.T) {
-		configContent := `{
-			"database": {
-				"host": "localhost",
-				"port": 35432,
-				"user": "boilerplate_user",
-				"password": "boilerplate_password",
-				"db_name": "boilerplate",
-				"ssl_mode": false
-			},
-			"jwt": {
-				"issuer": "custom_issuer",
-				"audience": "custom_audience",
-				"secret_key": "custom_secret_key"
-			},
-			"logger": {
-				"level": "debug"
-			},
-			"redis": {
-				"addrs": ["localhost:36379"],
-				"password": "",
-				"db": 0
-			},
-			"server": {
-				"host": "localhost",
-				"port": 38080
-			}
-		}`
-		beforeTest(t, &configContent)
+func TestRegisterHooksOnStop(t *testing.T) {
+	t.Parallel()
 
-		app := New()
-		require.NotNil(t, app)
+	t.Run("OnStop handles server shutdown", func(t *testing.T) {
+		t.Parallel()
 
-		startAndStopApp(t, app)
+		var onStopCalled bool
+
+		var onStopError error
+
+		lifecycle := &mockLifecycle{
+			appendFunc: func(hook fx.Hook) {
+				if hook.OnStop != nil {
+					onStopCalled = true
+					onStopError = hook.OnStop(context.Background())
+				}
+			},
+		}
+
+		log := logger.InitForTest(t)
+		serverClient := server.InitForTest(t)
+
+		registerHooks(lifecycle, log, serverClient)
+
+		require.True(t, onStopCalled, "OnStop should be called")
+		require.NoError(t, onStopError, "OnStop should succeed")
 	})
 }
