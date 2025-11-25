@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -138,7 +139,7 @@ func rateLimit(
 				log.Debug("rate limit exceeded", "key", key, "current", current, "limit", requests)
 
 				writer.Header().Set("Retry-After", strconv.Itoa(int(window.Seconds())))
-				http.Error(writer, "Rate limit exceeded", http.StatusTooManyRequests)
+				genAPI.SendError(writer, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", "rate limit exceeded")
 
 				return
 			}

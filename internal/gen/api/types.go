@@ -7,9 +7,20 @@ import (
 	"time"
 )
 
-const (
-	BearerAuthScopes = "BearerAuth.Scopes"
-)
+// GenericErrorDetails generic error details
+type GenericErrorDetails = map[string]interface{}
+
+// GenericErrorResponse defines model for GenericErrorResponse.
+type GenericErrorResponse struct {
+	// Details generic error details
+	Details *GenericErrorDetails `json:"details,omitempty"`
+
+	// Error error type identifier
+	Error string `json:"error"`
+
+	// Message human readable error message
+	Message string `json:"message"`
+}
 
 // SystemHealthCheckResponse defines model for SystemHealthCheckResponse.
 type SystemHealthCheckResponse struct {

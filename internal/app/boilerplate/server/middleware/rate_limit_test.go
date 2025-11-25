@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -253,9 +255,16 @@ func TestGlobalRateLimit(t *testing.T) {
 		handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusTooManyRequests, recorder.Code)
+		assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 		assert.Equal(t, "3", recorder.Header().Get("X-Ratelimit-Limit"))
 		assert.Equal(t, "0", recorder.Header().Get("X-Ratelimit-Remaining"))
 		assert.NotEmpty(t, recorder.Header().Get("Retry-After"))
+
+		var response genAPI.GenericErrorResponse
+
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+		assert.Equal(t, "TOO_MANY_REQUESTS", response.Error)
+		assert.Equal(t, "rate limit exceeded", response.Message)
 	})
 }
 

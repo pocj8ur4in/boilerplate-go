@@ -1,3 +1,26 @@
+# Common
+GenericErrorResponse:
+    type: object
+    required:
+        - error
+        - message
+    properties:
+        error:
+            type: string
+            description: error type identifier
+            example: "EXAMPLE_ERROR"
+        message:
+            type: string
+            description: human readable error message
+            example: "example error message"
+        details:
+            $ref: "#/GenericErrorDetails"
+
+GenericErrorDetails:
+    type: object
+    description: generic error details
+    properties:
+
 # System
 SystemHealthCheckResponse:
     type: object

@@ -18,14 +18,14 @@ func InitForTest(t *testing.T) *client {
 	t.Helper()
 
 	testClient := &client{
-		log:   logger.InitForTest(t),
-		db:    database.InitForTest(t),
-		jwt:   jwt.InitForTest(t),
-		redis: redis.InitForTest(t),
+		log:      logger.InitForTest(t),
+		database: database.InitForTest(t),
+		jwt:      jwt.InitForTest(t),
+		redis:    redis.InitForTest(t),
 	}
 
 	require.NotNil(t, testClient.log)
-	require.NotNil(t, testClient.db)
+	require.NotNil(t, testClient.database)
 	require.NotNil(t, testClient.jwt)
 	require.NotNil(t, testClient.redis)
 

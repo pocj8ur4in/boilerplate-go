@@ -7,7 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 )
 
 const (
@@ -34,16 +34,16 @@ func (c *client) HealthCheck(writer http.ResponseWriter, request *http.Request) 
 	}()
 
 	// set response
-	response := api.SystemHealthCheckResponse{
+	response := genAPI.SystemHealthCheckResponse{
 		Timestamp: time.Now(),
-		Services: api.SystemHealthCheckResponseServices{
+		Services: genAPI.SystemHealthCheckResponseServices{
 			Database: true,
 			Redis:    true,
 		},
 	}
 
 	// check database health
-	if err := c.db.PingContext(ctx); err != nil {
+	if err := c.database.PingContext(ctx); err != nil {
 		log.Error("database health check failed", "error", err)
 
 		response.Services.Database = false

@@ -19,7 +19,7 @@ func TestInit(t *testing.T) {
 
 		require.NotNil(t, handlerClient)
 		require.NotNil(t, handlerClient.log)
-		require.NotNil(t, handlerClient.db)
+		require.NotNil(t, handlerClient.database)
 		require.NotNil(t, handlerClient.jwt)
 		require.NotNil(t, handlerClient.redis)
 	})
@@ -88,7 +88,7 @@ func TestSendError(t *testing.T) {
 				handlerClient := InitForTest(t)
 				recorder := httptest.NewRecorder()
 
-				handlerClient.sendError(recorder, testCase.statusCode, testCase.message)
+				handlerClient.sendError(recorder, testCase.statusCode, "GENERIC_ERROR", testCase.message)
 
 				assert.Equal(t, testCase.statusCode, recorder.Code)
 				assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))

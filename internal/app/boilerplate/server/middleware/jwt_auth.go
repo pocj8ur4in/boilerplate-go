@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -45,24 +44,6 @@ type jwtAuthCache struct {
 	router routers.Router
 }
 
-// ValidationError represents a validation error with field information.
-type ValidationError struct {
-	// Field is the field that caused the validation error.
-	Field string `json:"field"`
-
-	// Message is the message of the validation error.
-	Message string `json:"message"`
-}
-
-// ValidationErrorResponse represents the response for validation errors.
-type ValidationErrorResponse struct {
-	// Error is the error message.
-	Error string `json:"error"`
-
-	// Errors is the list of validation errors.
-	Errors []ValidationError `json:"errors,omitempty"`
-}
-
 // JwtAuth is a middleware that validates JWT tokens based on OpenAPI spec security requirements.
 func JwtAuth(log logger.Client, jwt jwt.Client) func(next http.Handler) http.Handler {
 	return openAPIValidationWithSpec(log, jwt, nil)
@@ -84,7 +65,8 @@ func openAPIValidationWithSpec(
 			// load spec if not cached
 			if err := jwtAuth.ensureSpecLoaded(); err != nil {
 				log.Error("failed to load OpenAPI spec", "error", err)
-				sendValidationError(writer, "internal server error", nil)
+
+				genAPI.SendError(writer, http.StatusInternalServerError, "JWT_AUTH_ERROR", "failed to load OpenAPI spec")
 
 				return
 			}
@@ -97,9 +79,7 @@ func openAPIValidationWithSpec(
 					"error", err,
 				)
 
-				// parse validation errors
-				validationErrors := parseValidationError(err)
-				sendValidationError(writer, "validation failed", validationErrors)
+				genAPI.SendError(writer, http.StatusBadRequest, "JWT_AUTH_ERROR", parseErrorMessage(err))
 
 				return
 			}
@@ -258,75 +238,34 @@ func authenticationFunc(log logger.Client, jwt jwt.Client) openapi3filter.Authen
 	}
 }
 
-// parseValidationError parses the validation error and extracts field-level errors.
-func parseValidationError(err error) []ValidationError {
+// parseErrorMessage parses the validation error returning error message.
+func parseErrorMessage(err error) string {
 	if err == nil {
-		return nil
+		return "unknown error"
 	}
 
-	var validationErrors []ValidationError
-
-	// try to parse as RequestError
+	// parse as RequestError
 	var reqErr *openapi3filter.RequestError
 	if errors.As(err, &reqErr) {
-		field := "request"
-		if reqErr.Parameter != nil {
-			field = reqErr.Parameter.Name
-		}
-
-		validationErrors = append(validationErrors, ValidationError{
-			Field:   field,
-			Message: reqErr.Error(),
-		})
-
-		return validationErrors
+		return reqErr.Error()
 	}
 
-	// try to parse as SecurityRequirementsError
+	// parse as SecurityRequirementsError
 	var secErr *openapi3filter.SecurityRequirementsError
 	if errors.As(err, &secErr) {
-		for _, e := range secErr.Errors {
-			validationErrors = append(validationErrors, ValidationError{
-				Field:   "security",
-				Message: e.Error(),
-			})
+		if len(secErr.Errors) > 0 {
+			return secErr.Errors[0].Error()
 		}
 
-		return validationErrors
+		return "authentication required"
 	}
 
 	// parse schema validation errors
 	var schemaErr *openapi3.SchemaError
 	if errors.As(err, &schemaErr) {
-		validationErrors = append(validationErrors, ValidationError{
-			Field:   schemaErr.SchemaField,
-			Message: schemaErr.Reason,
-		})
-
-		return validationErrors
+		return schemaErr.Reason
 	}
 
-	// fallback: generic error
-	validationErrors = append(validationErrors, ValidationError{
-		Field:   "request",
-		Message: err.Error(),
-	})
-
-	return validationErrors
-}
-
-// sendValidationError sends a validation error response.
-func sendValidationError(writer http.ResponseWriter, message string, errors []ValidationError) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(http.StatusBadRequest)
-
-	response := ValidationErrorResponse{
-		Error:  message,
-		Errors: errors,
-	}
-
-	if err := json.NewEncoder(writer).Encode(response); err != nil {
-		// if encoding fails, send plain text error
-		http.Error(writer, "internal server error", http.StatusInternalServerError)
-	}
+	// fallback to generic error
+	return err.Error()
 }

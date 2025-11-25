@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 )
@@ -403,9 +405,10 @@ func TestParseValidationError(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		name           string
-		err            error
-		expectedErrors []ValidationError
+		name            string
+		err             error
+		expectedType    string
+		expectedMessage string
 	}{
 		{
 			name: "request error with parameter",
@@ -413,39 +416,34 @@ func TestParseValidationError(t *testing.T) {
 				Parameter: &openapi3.Parameter{Name: "user_id"},
 				Err:       ErrInvalidParameter,
 			},
-			expectedErrors: []ValidationError{
-				{Field: "user_id", Message: "parameter \"user_id\" in  has an error: invalid parameter"},
-			},
+			expectedType:    "VALIDATION_FAILED",
+			expectedMessage: "parameter \"user_id\" in  has an error: invalid parameter",
 		},
 		{
-			name: "request error without parameter",
-			err:  &openapi3filter.RequestError{Err: ErrRequestValidationFailed},
-			expectedErrors: []ValidationError{
-				{Field: "request", Message: "request validation failed"},
-			},
+			name:            "request error without parameter",
+			err:             &openapi3filter.RequestError{Err: ErrRequestValidationFailed},
+			expectedType:    "VALIDATION_FAILED",
+			expectedMessage: "request validation failed",
 		},
 		{
 			name: "security requirements error",
 			err: &openapi3filter.SecurityRequirementsError{
 				Errors: []error{ErrMissingBearerToken},
 			},
-			expectedErrors: []ValidationError{
-				{Field: "security", Message: "missing bearer token"},
-			},
+			expectedType:    "UNAUTHORIZED",
+			expectedMessage: "missing bearer token",
 		},
 		{
-			name: "schema error",
-			err:  &openapi3.SchemaError{SchemaField: "#/properties/email", Reason: "invalid format"},
-			expectedErrors: []ValidationError{
-				{Field: "#/properties/email", Message: "invalid format"},
-			},
+			name:            "schema error",
+			err:             &openapi3.SchemaError{SchemaField: "#/properties/email", Reason: "invalid format"},
+			expectedType:    "VALIDATION_FAILED",
+			expectedMessage: "invalid format",
 		},
 		{
-			name: "generic error",
-			err:  ErrUnknownValidationError,
-			expectedErrors: []ValidationError{
-				{Field: "request", Message: "unknown validation error"},
-			},
+			name:            "generic error",
+			err:             ErrUnknownValidationError,
+			expectedType:    "VALIDATION_FAILED",
+			expectedMessage: "unknown validation error",
 		},
 	}
 
@@ -453,9 +451,9 @@ func TestParseValidationError(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := parseValidationError(testcase.err)
+			message := parseErrorMessage(testcase.err)
 
-			assert.Equal(t, testcase.expectedErrors, result)
+			assert.Equal(t, testcase.expectedMessage, message)
 		})
 	}
 }
@@ -507,45 +505,31 @@ func TestEnsureSpecLoaded(t *testing.T) {
 	}
 }
 
-func TestSendValidationError(t *testing.T) {
+func TestSendErrorResponse(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
 		name           string
+		errorType      string
 		message        string
-		errors         []ValidationError
 		expectedStatus int
 	}{
 		{
-			name:    "single validation error",
-			message: "validation failed",
-			errors: []ValidationError{
-				{
-					Field:   "email",
-					Message: "invalid format",
-				},
-			},
+			name:           "validation error",
+			errorType:      "VALIDATION_FAILED",
+			message:        "invalid format",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:    "multiple validation errors",
-			message: "validation failed",
-			errors: []ValidationError{
-				{
-					Field:   "name",
-					Message: "required field missing",
-				},
-				{
-					Field:   "email",
-					Message: "invalid format",
-				},
-			},
+			name:           "unauthorized error",
+			errorType:      "UNAUTHORIZED",
+			message:        "missing bearer token",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "no validation errors",
-			message:        "validation failed",
-			errors:         nil,
+			name:           "internal server error",
+			errorType:      "INTERNAL_SERVER_ERROR",
+			message:        "failed to load OpenAPI spec",
 			expectedStatus: http.StatusBadRequest,
 		},
 	}
@@ -555,10 +539,16 @@ func TestSendValidationError(t *testing.T) {
 			t.Parallel()
 
 			recorder := httptest.NewRecorder()
-			sendValidationError(recorder, testcase.message, testcase.errors)
+			genAPI.SendError(recorder, testcase.expectedStatus, testcase.errorType, testcase.message)
 
 			assert.Equal(t, testcase.expectedStatus, recorder.Code)
 			assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+
+			var response genAPI.GenericErrorResponse
+
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Equal(t, testcase.errorType, response.Error)
+			assert.Equal(t, testcase.message, response.Message)
 		})
 	}
 }

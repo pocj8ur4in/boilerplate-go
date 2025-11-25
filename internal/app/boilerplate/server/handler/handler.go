@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/database"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/jwt"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
@@ -19,8 +19,8 @@ type client struct {
 	// log provides logger client.
 	log logger.Client
 
-	// db provides database queries client.
-	db database.Client
+	// database provides database queries client.
+	database database.Client
 
 	// jwt provides JWT service client.
 	jwt jwt.Client
@@ -37,8 +37,8 @@ type ConstructorParams struct {
 	// Log provides logger client.
 	Log logger.Client
 
-	// DB provides database queries client.
-	DB database.Client
+	// DataBase provides database queries client.
+	DataBase database.Client
 
 	// JWT provides JWT service client.
 	JWT jwt.Client
@@ -51,12 +51,12 @@ type ConstructorParams struct {
 func NewModule() fx.Option {
 	return fx.Module("handler",
 		// provide concrete type for constructor
-		fx.Provide(func(params ConstructorParams) (api.ServerInterface, error) {
+		fx.Provide(func(params ConstructorParams) (genAPI.ServerInterface, error) {
 			return &client{
-				log:   params.Log,
-				db:    params.DB,
-				jwt:   params.JWT,
-				redis: params.Redis,
+				log:      params.Log,
+				database: params.DataBase,
+				jwt:      params.JWT,
+				redis:    params.Redis,
 			}, nil
 		}),
 	)
@@ -74,12 +74,6 @@ func (c *client) sendResponse(writer http.ResponseWriter, code int, data interfa
 }
 
 // sendError sends error response.
-func (c *client) sendError(writer http.ResponseWriter, code int, message string) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(code)
-
-	// encode error response
-	if err := json.NewEncoder(writer).Encode(map[string]string{"error": message}); err != nil {
-		c.log.Error("failed to encode error response", "error", err)
-	}
+func (c *client) sendError(writer http.ResponseWriter, httpStatus int, errorType, message string) {
+	genAPI.SendError(writer, httpStatus, errorType, message)
 }

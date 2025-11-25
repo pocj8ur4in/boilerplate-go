@@ -2,7 +2,7 @@
 get:
     operationId: HandleMetrics
     summary: metrics
-    description: get the Prometheus metrics (Prometheus / Grafana).
+    description: get the prometheus metrics for monitoring and observability.
     tags:
         - system
     responses:
@@ -40,3 +40,21 @@ get:
                         # HELP process_resident_memory_bytes Resident memory size in bytes.
                         # TYPE process_resident_memory_bytes gauge
                         process_resident_memory_bytes 2.4576e+07
+        429:
+            description: "Too Many Requests: rate limit exceeded"
+            content:
+                application/json:
+                    schema:
+                        $ref: "./schemas.yaml#/GenericErrorResponse"
+                    example:
+                        error: "TOO_MANY_REQUESTS"
+                        message: "rate limit exceeded"
+        503:
+            description: "Service Unavailable: request throttling timeout"
+            content:
+                application/json:
+                    schema:
+                        $ref: "./schemas.yaml#/GenericErrorResponse"
+                    example:
+                        error: "REQUEST_THROTTLING_TIMEOUT"
+                        message: "server is too busy"

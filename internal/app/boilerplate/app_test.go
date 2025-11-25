@@ -32,8 +32,8 @@ func (m *mockLifecycle) Append(hook fx.Hook) {
 
 // testConfig holds test infrastructure configuration.
 type testConfig struct {
-	// db provides test database client.
-	db database.Client
+	// database provides test database client.
+	database database.Client
 
 	// dbConfig provides test database configuration.
 	dbConfig database.Config
@@ -68,7 +68,7 @@ func newTestConfig(t *testing.T) *testConfig {
 	redisClient := redis.InitForTest(t)
 
 	return &testConfig{
-		db:          dbClient,
+		database:    dbClient,
 		dbConfig:    dbClient.Config,
 		jwt:         jwtClient,
 		jwtConfig:   jwtClient.Config,
@@ -238,10 +238,7 @@ func TestRegisterHooksOnStart(t *testing.T) {
 			},
 		}
 
-		log := logger.InitForTest(t)
-		server := server.InitForTest(t)
-
-		registerHooks(lifecycle, log, server)
+		registerHooks(lifecycle, logger.InitForTest(t), server.InitForTest(t))
 
 		require.True(t, onStartCalled, "OnStart should be called")
 		require.NoError(t, onStartError, "OnStart should not return error")

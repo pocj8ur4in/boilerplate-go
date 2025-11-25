@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+
 	"go.uber.org/fx"
 
 	"github.com/pocj8ur4in/boilerplate-go/internal/app/boilerplate/config"

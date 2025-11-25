@@ -132,8 +132,8 @@ type ConstructorParams struct {
 	// log provides logger client.
 	Log logger.Client
 
-	// DB provides database client.
-	DB database.Client
+	// Database provides database client.
+	Database database.Client
 
 	// JWT provides JWT client.
 	JWT jwt.Client
@@ -154,7 +154,7 @@ func NewModule() fx.Option {
 			instance := newInstance(params.Config)
 
 			// setup instance
-			instance.setup(params.Handler, params.Log, params.DB, params.JWT, params.Redis)
+			instance.setup(params.Handler, params.Log, params.Database, params.JWT, params.Redis)
 
 			return instance, nil
 		}),
@@ -176,13 +176,13 @@ func newInstance(config Config) *client {
 func (c *client) setup(
 	apiHandler genAPI.ServerInterface,
 	log logger.Client,
-	db database.Client,
+	database database.Client,
 	jwt jwt.Client,
 	redis redis.Client,
 ) {
 	// inject outer dependencies
 	c.log = log
-	c.queries = genDB.New(db.GetPool())
+	c.queries = genDB.New(database.GetPool())
 	c.registry = prometheus.NewRegistry()
 
 	// setup router and handlers

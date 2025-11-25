@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	genAPI "github.com/pocj8ur4in/boilerplate-go/internal/gen/api"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/logger"
 	"github.com/pocj8ur4in/boilerplate-go/internal/pkg/redis"
 )
@@ -166,7 +167,7 @@ func waitForThrottleSlot(
 			// remove from queue on timeout
 			_ = removeFromQueue(ctx, redis, key)
 
-			http.Error(writer, "request timeout: server is too busy", http.StatusServiceUnavailable)
+			genAPI.SendError(writer, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "server is too busy")
 
 			return false
 		}
