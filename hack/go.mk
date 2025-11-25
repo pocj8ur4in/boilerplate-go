@@ -40,8 +40,7 @@ go:
 		cd $(CURDIR) && CONFIG_PATH=$(CONFIG_EXAMPLE_PATH) CGO_ENABLED=1 go test $$(go list ./... | grep -v /internal/gen/) -bench=. -benchmem -run=^$$; \
 	elif [ "$(TARGET)" = "coverage" ]; then \
 		echo "$(BLUE)Testing go project with coverage...$(RESET)"; \
-		CONFIG_PATH=$(CONFIG_EXAMPLE_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -v -p=1 -parallel=4 -timeout=15m -coverprofile=coverage.out -covermode=atomic && \
-		go tool cover -func=coverage.out; \
+		CONFIG_PATH=$(CONFIG_EXAMPLE_PATH) CGO_ENABLED=1 go test $$(go list $(CURDIR)/... | grep -v /internal/gen/) -p=1 -parallel=4 -timeout=15m -cover; \
 	elif [ "$(TARGET)" = "fmt" ]; then \
 		echo "$(BLUE)Formatting go project...$(RESET)"; \
 		CONFIG_PATH=$(CONFIG_PATH) CGO_ENABLED=1 golangci-lint fmt $(CURDIR)/... -c $(CURDIR)/golangci.yaml; \
