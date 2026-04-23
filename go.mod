@@ -1,8 +1,6 @@
 module github.com/pocj8ur4in/boilerplate-go
 
-go 1.25
-
-toolchain go1.25.0
+go 1.25.0
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
@@ -11,7 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/lmittmann/tint v1.1.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.14.0
